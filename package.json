@@ -25,6 +25,7 @@
     "@nostr-dev-kit/ndk": "^2.7.1",
     "@tryghost/tpl": "^0.1.29",
     "browser-hbs": "file:../browser-hbs",
+    "dexie": "^4.0.7",
     "downsize": "^0.0.8",
     "lodash-es": "^4.17.21",
     "luxon": "^3.4.4",

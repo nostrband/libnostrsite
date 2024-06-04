@@ -199,7 +199,8 @@ export default async function ghost_head(options: any) {
   // eslint-disable-line camelcase
   // debug('begin');
 
-  const { escapeExpression, SafeString, urlUtils } = getRenderer(options);
+  const { escapeExpression, SafeString, urlUtils, renderOptions } =
+    getRenderer(options);
 
   // FIXME if bad url - get that from root data and don't render the meta
   // if server error page do nothing
@@ -231,8 +232,9 @@ export default async function ghost_head(options: any) {
   const head = [];
 
   const site = options.data.site;
-  const dataRoot = options.data.root;
-  const context = dataRoot._locals?.context ? dataRoot._locals?.context : null;
+  const root = options.data.root;
+  const object = root.object;
+  const context = root.context;
   // const safeVersion = dataRoot._locals?.safeVersion;
 
   //   const globalCodeinjection = settingsCache.get("codeinjection_head");
@@ -258,11 +260,69 @@ export default async function ghost_head(options: any) {
     // const meta = await getMetaData(dataRoot, dataRoot);
     // const frontendKey = await getFrontendKey();
 
+    const metaTitle =
+      object?.meta_title ||
+      object?.title ||
+      site.meta_title ||
+      site.title ||
+      site.og_title;
+
+    const metaDesc = object
+      ? object.meta_description || object.excerpt
+      : site.meta_description || site.description || site.og_description;
+
+    const metaImage = object?.feature_image || site.cover_image || site.icon;
+
+    const origin = renderOptions?.origin || site.origin;
+    const canonical = `${origin}${object?.url || "/"}`;
+
+    if (metaTitle) {
+      // <title> is usually printed by theme using {{meta_title}} helper
+      head.push(`
+      <meta property="og:title" content="${escapeExpression(metaTitle)}" />
+      <meta property="twitter:title" content="${escapeExpression(metaTitle)}" />
+    `);
+    }
+    if (metaDesc) {
+      head.push(`
+      <meta name="description" content="${escapeExpression(metaDesc)}" />
+      <meta property="og:description" content="${escapeExpression(metaDesc)}" />
+      <meta property="twitter:description" content="${escapeExpression(
+        metaDesc
+      )}" />
+    `);
+    }
+    if (metaImage) {
+      head.push(`
+      <meta property="og:image" content="${escapeExpression(metaImage)}" />
+      <meta property="twitter:image" content="${escapeExpression(metaImage)}" />
+      <meta property="twitter:image:alt" content="${escapeExpression(
+        metaTitle
+      )}" />
+    `);
+    }
+
+    head.push(`<link rel="canonical" href="${canonical}" />`);
+    head.push(`<link rel="og:url" href="${canonical}" />`);
+    head.push(`<meta property="og:site_name" content="${site.title}" />`);
+    head.push(`<meta name="twitter:card" content="summary" />`);
+
+    if (root.author) {
+      head.push(`<meta name="og:type" content="profile" />`);
+      head.push(
+        `<meta property="og:profile:username" content="${root.author.name}" />`
+      );
+    } else {
+      head.push(`<meta name="og:type" content="website" />`);
+    }
+
     // site id for pwa code to function and for crawlers to see
     head.push(`<meta property="nostr:site" content="${site.id}" >`);
 
     // manifest
-    head.push(`<link rel="manifest" href="${site.url}manifest.webmanifest"></head>`);
+    head.push(
+      `<link rel="manifest" href="${site.url}manifest.webmanifest"></head>`
+    );
 
     // jquery is assumed by many themes
     head.push(`
@@ -275,45 +335,43 @@ export default async function ghost_head(options: any) {
 
     // FIXME zapthreads testing
     head.push(`
-  <script type="text/javascript" async src="https://unpkg.com/zapthreads/dist/zapthreads.iife.js"></script>
+    <script type="text/javascript" async src="https://unpkg.com/zapthreads/dist/zapthreads.iife.js"></script>
   `);
 
     // FIXME nostr-login testing
     head.push(`
-  <script src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
-    data-perms="sign_event:1"
-  ></script>
-  <script async src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
-  <script>
-    document.addEventListener("nlAuth", async (e) => {
-      console.log("nlAuth", e);
-      if (e.detail.type === 'login' || e.detail.type === 'signup') {
-        window.__nlAuthed = true;
-      } else {
-        window.__nlAuthed = false;
-      }
-      const zapThreads = document.querySelector('zap-threads');
-      if (zapThreads) {
-        if (window.__nlAuthed)
-          zapThreads.setAttribute("user", window.NostrTools.nip19.npubEncode(await window.nostr.getPublicKey()));
-        else
-          zapThreads.setAttribute("user", "");
-      }
-    });
-  </script>
+    <script src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
+      data-perms="sign_event:1"
+    ></script>
+    <script>
+      document.addEventListener("nlAuth", async (e) => {
+        console.log("nlAuth", e);
+        if (e.detail.type === 'login' || e.detail.type === 'signup') {
+          window.__nlAuthed = true;
+        } else {
+          window.__nlAuthed = false;
+        }
+        const zapThreads = document.querySelector('zap-threads');
+        if (zapThreads) {
+          if (window.__nlAuthed)
+            zapThreads.setAttribute("user", window.nostrSite.nostrTools.nip19.npubEncode(await window.nostr.getPublicKey()));
+          else
+            zapThreads.setAttribute("user", "");
+        }
+      });
+    </script>
   `);
 
     // debug('end fetch');
     if (site.icon) {
-      head.push(
-        `<link rel="icon" href="${site.icon}" type="${getMime(site.icon)}">
-         <link rel="apple-touch-icon" href="${site.icon}">
-         <meta name="theme-color" content="#ffffff">
-         `
-      );
+      head.push(`
+    <link rel="icon" href="${site.icon}" type="${getMime(site.icon)}">
+    <link rel="apple-touch-icon" href="${site.icon}">
+    <meta name="theme-color" content="#ffffff">
+      `);
     }
 
-    const pagination = dataRoot.pagination;
+    const pagination = root.pagination;
     const paginationUrl = (page: boolean) => {
       return urlUtils.createUrl(`/page/${page}`);
     };

@@ -1,9 +1,8 @@
-export function getPwaCode(ssr: boolean) {
-  return `
-<script>
-  ${ssr ? "" : "window.nostrSite.startPwa();"}
-</script>
-<style>
+import { RenderOptions } from ".";
+
+export function getPwaCode(options: RenderOptions) {
+  const style = `
+  <style>
   #pwa-toast {
     visibility: hidden;
     position: fixed;
@@ -43,4 +42,33 @@ export function getPwaCode(ssr: boolean) {
   }  
 </style>
 `;
+
+  const { mode = "iife" } = options;
+  const { ssrIndexScriptUrl = "/index.js" } = options;
+
+  switch (mode) {
+    // iife mode has all the code loaded already by the bootstrap html oage,
+    // all we need is to launch the service worker after the page is rendered
+    case "iife": return `
+      <script>
+        window.nostrSite.startPwa();
+      </script>
+      ${style}
+    `;
+
+    // sw does not need to launch anything, all code is already loaded and started
+    case "sw": return `
+      ${style}
+    `;
+
+    // ssr loads an async engine script that will launch PWA as soon as it loads
+    // without blocking the pre-rendered html processing
+    // FIXME make /index.js an .env variable
+    case "ssr": return `
+      <script async type="text/javascript" src="${ssrIndexScriptUrl}" onload="window.nostrSite.startPwa();"></script>
+      ${style}
+    `;
+
+    default: return "";
+  }
 }

@@ -15,7 +15,7 @@ import { JQUERY, KIND_PACKAGE, KIND_PROFILE, KIND_SITE } from "./consts";
 import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
-import { Renderer, ServiceWorkerCaches } from "./types/renderer";
+import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import { isBlossomUrl } from "./utils";
 
 export class NostrSiteRenderer implements Renderer {
@@ -25,6 +25,8 @@ export class NostrSiteRenderer implements Renderer {
   private ndk?: NDK;
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
+  private store?: NostrStore;
+  private hasStarted: boolean = false;
 
   constructor(addr: SiteAddr) {
     this.addr = addr;
@@ -32,6 +34,10 @@ export class NostrSiteRenderer implements Renderer {
 
   public getAddr() {
     return this.addr;
+  }
+
+  public started() {
+    return this.hasStarted;
   }
 
   public getThemeAssets(): string[] {
@@ -164,18 +170,15 @@ export class NostrSiteRenderer implements Renderer {
 
   public async destroy() {
     if (!this.ndk) return;
+    if (this.store) this.store.destroy();
     for (const r of this.ndk.pool.relays.values()) {
       r.disconnect();
     }
   }
 
-  public async start({
-    loadAll = false,
-    ssr = false,
-  }: {
-    loadAll?: boolean;
-    ssr?: boolean;
-  }) {
+  public async start(options: RenderOptions) {
+    const { origin } = options;
+
     // ndk connect to site relays
     // don't block and wait until all relays connect,
     // any relay can serve site event and we need it asap
@@ -186,7 +189,7 @@ export class NostrSiteRenderer implements Renderer {
     console.log("site", { site, profile });
     if (!site) throw new Error("Nostr site event not found");
 
-    const parser = new NostrParser();
+    const parser = new NostrParser(origin);
 
     // site settings from the database (settingsCache)
     const settings = parser.parseSite(this.addr, site, profile);
@@ -197,19 +200,16 @@ export class NostrSiteRenderer implements Renderer {
     // kinda server-side settings,
     // FIXME must also come from site event!
     const config = loader.loadNconf();
-    config.url = new URL(
-      settings.url || "/",
-      (globalThis.document || self).location.origin
-    ).href;
+    config.url = new URL(settings.url || "/", origin || settings.origin).href;
 
-    const store = new NostrStore(this.ndk!, settings, parser);
+    this.store = new NostrStore(options.mode, this.ndk!, settings, parser);
 
-    this.engine = new ThemeEngine(store, ssr);
+    this.engine = new ThemeEngine(this.store, options);
 
     // do it in parallel to save some latency
     const [themes] = await Promise.all([
       this.fetchThemes(settings, parser),
-      store.load(loadAll),
+      this.store.load(),
     ]);
 
     // now we have everything needed to init the engine
@@ -217,12 +217,12 @@ export class NostrSiteRenderer implements Renderer {
 
     // after data is loaded and engine is initialized,
     // prepare using the engine (assign urls etc)
-    await store.prepare(this.engine);
+    await this.store.prepare(this.engine);
 
     // some defaults
     if (!settings.cover_image && settings.contributor_pubkeys) {
       for (const pubkey of settings.contributor_pubkeys) {
-        const profile = store.getProfile(pubkey);
+        const profile = this.store.getProfile(pubkey);
         if (profile?.profile?.banner) {
           settings.cover_image = profile?.profile?.banner;
           break;
@@ -230,9 +230,9 @@ export class NostrSiteRenderer implements Renderer {
       }
     }
     // FIXME somehow derive from profile etc
-    if (!settings.accent_color) {
-      settings.accent_color = "rgb(255, 0, 149)";
-    }
+    // if (!settings.accent_color) {
+    //   settings.accent_color = "rgb(255, 0, 149)";
+    // }
 
     console.log("updated settings", settings);
     this.settings = settings;
@@ -241,20 +241,22 @@ export class NostrSiteRenderer implements Renderer {
     if (this.caches && this.caches.themeCache) {
       await this.precacheTheme(this.caches.themeCache);
     }
+
+    this.hasStarted = true;
   }
 
   public async render(path: string) {
     const r = await this.engine!.render(path);
 
     if (this.caches) {
-      const blossom = r.context.mediaUrls.filter(u => isBlossomUrl(u));
-      const media = r.context.mediaUrls.filter(u => !isBlossomUrl(u));
+      const blossom = r.context.mediaUrls.filter((u) => isBlossomUrl(u));
+      const media = r.context.mediaUrls.filter((u) => !isBlossomUrl(u));
       if (this.caches.blossomCache)
         this.precacheMedia(this.caches.blossomCache, blossom);
       if (this.caches.mediaCache)
         this.precacheMedia(this.caches.mediaCache, media);
     }
-    
+
     return r;
   }
 
@@ -331,5 +333,9 @@ export class NostrSiteRenderer implements Renderer {
     // FIXME this pre-caching seems to make no sense, unless we
     // pre-cache the next page of images!
     //await this.cacheAll(cache, assets, 5);
+  }
+
+  public async getSiteMap() {
+    return this.engine!.getSiteMap();
   }
 }

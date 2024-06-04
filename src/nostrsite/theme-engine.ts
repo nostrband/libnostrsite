@@ -29,6 +29,7 @@ import {
 } from "./partials/default-partials";
 import merge from "lodash-es/merge";
 import toNumber from "lodash-es/toNumber";
+import { RenderOptions } from ".";
 
 const DEFAULT_POSTS_PER_PAGE = 6;
 
@@ -39,7 +40,7 @@ function ensureNumber(v: any | undefined): number | undefined {
 
 export class ThemeEngine {
   private readonly hbs;
-  private readonly ssr;
+  private readonly options: RenderOptions;
 
   private urlUtils?: NostrSiteUrlUtils;
   private store: Store;
@@ -55,9 +56,9 @@ export class ThemeEngine {
   private config: any = {};
   private custom: any = {};
 
-  constructor(store: Store, ssr: boolean) {
+  constructor(store: Store, options: RenderOptions) {
     this.store = store;
-    this.ssr = ssr;
+    this.options = options;
 
     this.hbs = new BrowserHbs();
     console.debug("hbs", this.hbs);
@@ -168,7 +169,7 @@ export class ThemeEngine {
       SafeString: this.hbs.SafeString,
       escapeExpression: this.hbs.handlebars.Utils.escapeExpression,
       hbs: this.hbs,
-      ssr: this.ssr,
+      renderOptions: this.options,
       localUtils,
       config: cfg,
       store: this.store,
@@ -350,5 +351,37 @@ export class ThemeEngine {
     console.log("rendered", path, "in", Date.now() - start, "ms");
 
     return { result, context };
+  }
+
+  public async getSiteMap() {
+    const map: string[] = [];
+    const base = this.settings!.url || "/";
+    const prefix = base.substring(0, base.length - 1);
+    const put = (p: string) => {
+      const path = `${prefix}${p}`;
+      map.push(path);
+    }
+    put("/");
+
+    const posts = (await this.store.list({ type: "posts", limit: 1000 })).posts;
+
+    // FIXME shouldn't this live in router?
+    // OTOH, object.url is filled in parser, so it's already a mess...
+    const limit =
+      ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
+    for (let i = 2; i <= posts!.length / limit; i++)
+      put(`/page/${i}`);
+
+    for (const p of posts!) {
+      put(p.url);
+    }
+    for (const t of (await this.store.list({ type: "tags", limit: 100 })).tags!) {
+      put(t.url);
+    }
+    for (const a of (await this.store.list({ type: "authors", limit: 10 })).authors!) {
+      put(a.url);
+    }
+
+    return map;
   }
 }

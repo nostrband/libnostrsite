@@ -5,6 +5,21 @@ import { NostrSiteRenderer } from "./nostrsite/nostr-site-renderer";
 import { SiteAddr } from "./nostrsite/types/site-addr";
 import NDK from "@nostr-dev-kit/ndk";
 
+export function parseAddr(naddr: string): SiteAddr {
+
+  const { type, data } = nip19.decode(naddr);
+  if (type !== "naddr" || data.kind !== KIND_SITE || !data.pubkey.trim()) {
+    console.log("Bad addr: ", type, data);
+    throw new Error("Bad addr");
+  }
+
+  return {
+    name: data.identifier,
+    pubkey: data.pubkey,
+    relays: data.relays,
+  };
+}
+
 export async function getMetaAddr(): Promise<SiteAddr | undefined> {
   // <link rel="manifest" href="manifest.json" />
   const metas = document.getElementsByTagName("meta");
@@ -17,17 +32,12 @@ export async function getMetaAddr(): Promise<SiteAddr | undefined> {
       continue;
     }
 
-    const { type, data } = nip19.decode(content);
-    if (type !== "naddr" || data.kind !== KIND_SITE || !data.pubkey.trim()) {
-      console.log("Bad meta nostr:site addr: ", type, data);
+    try {
+      return parseAddr(content);
+    } catch (e) {
+      console.log("Bad meta nostr:site addr: ", content);
       continue;
     }
-
-    return {
-      name: data.identifier,
-      pubkey: data.pubkey,
-      relays: data.relays,
-    };
   }
 
   return undefined;
@@ -42,7 +52,9 @@ export async function renderCurrentPage() {
 
   const start = Date.now();
   const renderer = new NostrSiteRenderer(addr);
-  await renderer.start({});
+  await renderer.start({
+    origin: window.location.origin
+  });
   const t1 = Date.now();
   console.log("renderer created in ", t1 - start);
 

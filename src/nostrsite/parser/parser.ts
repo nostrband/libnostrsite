@@ -13,13 +13,19 @@ import { DateTime } from "luxon";
 // @ts-ignore
 import downsize from "downsize";
 import { SiteAddr } from "../types/site-addr";
+import { slugify } from "../../ghost/helpers/slugify";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
 }
 
 export class NostrParser {
+  readonly origin?: string;
   private config: Map<string, string> | undefined;
+
+  constructor(origin?: string) {
+    this.origin = origin;
+  }
 
   public setConfig(config: Map<string, string>) {
     this.config = config;
@@ -61,6 +67,9 @@ export class NostrParser {
       relays: addr.relays,
     });
 
+    const ref = tv(event, "r");
+    const url = ref ? new URL(ref) : null;
+
     const settings: Site = {
       id,
       event: event.rawEvent(),
@@ -69,8 +78,8 @@ export class NostrParser {
       admin_pubkey: event.pubkey,
       admin_relays: addr.relays,
 
-      url: new URL(tv(event, "r") || "").pathname,
-      origin: window.location.origin,
+      url: url ? url.pathname : "/",
+      origin: this.origin || (url ? url.origin : ""),
 
       contributor_pubkeys: tags(event, "p").map((t) => t[1]),
       include_tags: tags(event, "include", 3).map((t) => ({
@@ -207,7 +216,7 @@ export class NostrParser {
     const html = await marked.parse(e.content);
     const post: Post = {
       id,
-      slug: tv(e, "slug") || tv(e, "d") || id,
+      slug: slugify(tv(e, "slug") || tv(e, "d") || id),
       uuid: e.id,
       url: "",
       title: tv(e, "title"),
@@ -228,7 +237,7 @@ export class NostrParser {
       codeinjection_foot: null,
       custom_template: null,
       canonical_url: null,
-      excerpt: tv(e, "summary"),// || downsize(html, { words: 50 }),
+      excerpt: tv(e, "summary") || await marked.parse(downsize(e.content, { words: 50 })),
       reading_time: 0,
       access: true,
       og_image: null,
@@ -267,7 +276,7 @@ export class NostrParser {
     const id = this.getId(e);
     const post: Post = {
       id,
-      slug: tv(e, "slug") || id,
+      slug: slugify(tv(e, "slug") || id),
       uuid: e.id,
       url: "",
       title: "",

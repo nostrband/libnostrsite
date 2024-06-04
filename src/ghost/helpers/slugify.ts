@@ -1,3 +1,4 @@
+// @ts-ignore
 import { stripInvisibleChars } from './strip-invisible-chars';
 import slugifyExt from "slugify";
 
@@ -6,26 +7,26 @@ import slugifyExt from "slugify";
  *
  * Prepares a string for use in a url.
  *
- * @param {String} string - the string we want to slugify
+ * @param {String} str - the string we want to slugify
  * @param {object} options - filter options
  * @param {bool} [options.requiredChangesOnly] - don't perform optional cleanup, e.g. removing extra dashes
  * @returns {String} slugified string
  */
-export function slugify(string, options = {}) {
+export function slugify(str: string, options: any = {}) {
     // Ensure we have a string
-    string = string || '';
+    str = str || '';
 
     // Strip all characters that cannot be printed
-    string = stripInvisibleChars(string);
+    str = stripInvisibleChars(str);
 
     // Handle the £ symbol separately, since it needs to be removed before the unicode conversion.
-    string = string.replace(/£/g, '-');
+    str = str.replace(/£/g, '-');
 
     // Remove non ascii characters
-    string = slugifyExt(string);
+    str = slugifyExt(str);
 
     // Replace URL reserved chars: `@:/?#[]!$&()*+,;=` as well as `\%<>|^~£"{}` and \`
-    string = string.replace(/(\s|\.|@|:|\/|\?|#|\[|\]|!|\$|&|\(|\)|\*|\+|,|;|=|\\|%|<|>|\||\^|~|"|\{|\}|`|–|—)/g, '-')
+    str = str.replace(/(\s|\.|@|:|\/|\?|#|\[|\]|!|\$|&|\(|\)|\*|\+|,|;|=|\\|%|<|>|\||\^|~|"|\{|\}|`|–|—)/g, '-')
     // Remove apostrophes
         .replace(/'/g, '')
         // Make the whole thing lowercase
@@ -34,7 +35,7 @@ export function slugify(string, options = {}) {
     // These changes are optional changes, we can enable/disable these
     if (!options.requiredChangesOnly) {
         // Convert 2 or more dashes into a single dash
-        string = string.replace(/-+/g, '-')
+        str = str.replace(/-+/g, '-')
         // Remove trailing dash
             .replace(/-$/, '')
             // Remove any dashes at the beginning
@@ -42,7 +43,7 @@ export function slugify(string, options = {}) {
     }
 
     // Handle whitespace at the beginning or end.
-    string = string.trim();
+    str = str.trim();
 
-    return string;
+    return str;
 };

@@ -8,4 +8,7 @@ export interface GlobalNostrSite {
   renderCurrentPage(): Promise<void>,
   newRenderer(addr: SiteAddr): Renderer,
   startSW(): void;
+  nostrTools: {
+    nip19: any;
+  }
 }

@@ -68,8 +68,15 @@
 
 // We use the name meta_title to match the helper for consistency:
 export default function meta_title(options: any) {
+  const site = options.data.site;
+  const object = options.data.root.object;
   return (
-    options.data.site.meta_title || options.data.site.title
+    object?.meta_title ||
+    object?.title ||
+    site.meta_title ||
+    site.title ||
+    site.og_title
   );
+
   //    return getMetaDataTitle(this, options.data.root, options);
 }

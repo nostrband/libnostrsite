@@ -7,7 +7,7 @@ import { getPwaCode } from "../../../pwa-code";
 
 // We use the name ghost_foot to match the helper for consistency:
 export default function ghost_foot(options: any) {
-  const { SafeString, ssr } = getRenderer(options);
+  const { SafeString, renderOptions } = getRenderer(options);
 
   // eslint-disable-line camelcase
   const foot: string[] = [];
@@ -34,7 +34,7 @@ export default function ghost_foot(options: any) {
   //   foot.push(tagCodeinjection);
   // }
 
-  foot.push(getPwaCode(ssr));
+  foot.push(getPwaCode(renderOptions));
 
   foot.push(`
   <section id="__nostr_site_loading_modal">
