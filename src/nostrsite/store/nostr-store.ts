@@ -186,6 +186,10 @@ export class NostrStore extends RamStore {
     await this.fetchObjects(since, 0, true);
   }
 
+  private async loadSsr() {
+      await this.fetchAllObjects();
+  }
+
   public async load() {
     this.recommendations = recommendations;
 
@@ -193,6 +197,8 @@ export class NostrStore extends RamStore {
       await this.loadMinimal();
     } else if (this.mode === "sw") {
       await this.loadAll();
+    } else if (this.mode === "ssr") {
+      await this.loadSsr();
     }
 
     await this.fetchAuthors();
