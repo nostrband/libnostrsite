@@ -1,4 +1,9 @@
-import NDK, { NDKEvent, NDKFilter, NDKRelaySet } from "@nostr-dev-kit/ndk";
+import NDK, {
+  NDKEvent,
+  NDKFilter,
+  NDKRelaySet,
+  NostrEvent,
+} from "@nostr-dev-kit/ndk";
 
 // @ts-ignore FIXME ADD TYPES
 import BrowserHbs from "browser-hbs";
@@ -11,12 +16,13 @@ import { Site } from "./types/site";
 import { ThemeEngine } from "./theme-engine";
 import { Theme } from "./types/theme";
 import { NostrStore } from "./store/nostr-store";
-import { JQUERY, KIND_PACKAGE, KIND_PROFILE, KIND_SITE } from "./consts";
+import { JQUERY, KIND_PACKAGE, KIND_SITE } from "./consts";
 import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import { isBlossomUrl } from "./utils";
+import { dbi } from "./store/db";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -55,31 +61,38 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   private async fetchSite() {
-    // fetch site object and it's author's profile in parallel
-    const [site, profile] = await Promise.all([
-      this.ndk!.fetchEvent(
-        {
-          // @ts-ignore
-          kinds: [KIND_SITE],
-          authors: [this.addr.pubkey],
-          "#d": [this.addr.name],
-        },
-        { groupable: false }
-      ),
-      this.ndk!.fetchEvent(
-        {
-          // @ts-ignore
-          kinds: [KIND_PROFILE],
-          authors: [this.addr.pubkey],
-        },
-        { groupable: false }
-      ),
-    ]);
+    // cached sites
+    const sites = await dbi.listKindEvents(KIND_SITE, 10);
 
-    return {
-      site,
-      profile,
-    };
+    // find cached site
+    const cachedSite = sites.find(
+      (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.name
+    );
+    console.log("cache site", cachedSite, sites);
+
+    // drop old cached sites, if any
+    const oldSiteIds = sites
+      .filter((s) => s.id !== cachedSite?.id)
+      .map((s) => s.id);
+    dbi.deleteEvents(oldSiteIds);
+
+    // got cached one
+    if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
+
+    // fetch site object and it's author's profile in parallel
+    const site = await this.ndk!.fetchEvent(
+      {
+        // @ts-ignore
+        kinds: [KIND_SITE],
+        authors: [this.addr.pubkey],
+        "#d": [this.addr.name],
+      },
+      { groupable: false }
+    );
+
+    if (site) dbi.addEvents([site]);
+
+    return site;
   }
 
   // private async fetchSampleThemes(_: Site, __: NostrParser): Promise<Theme[]> {
@@ -91,23 +104,49 @@ export class NostrSiteRenderer implements Renderer {
     settings: Site,
     parser: NostrParser
   ): Promise<Theme[]> {
-    const filter: NDKFilter = {
-      // @ts-ignore
-      kinds: [KIND_PACKAGE],
-      ids: settings.extensions.map((x) => x.event_id),
-    };
-    console.log("fetch themes", filter);
-    const events = await this.ndk!.fetchEvents(
-      filter,
-      { groupable: false },
-      NDKRelaySet.fromRelayUrls(
-        settings.extensions.map((x) => x.relay),
-        this.ndk!
-      )
-    );
-    if (!events) throw new Error("Theme not found");
+    const extIds = settings.extensions.map((x) => x.event_id);
 
-    const themeEvents = [...events].filter((e) =>
+    const cachedExtEvents = await dbi.listKindEvents(KIND_PACKAGE, 10);
+
+    const exts: NostrEvent[] = cachedExtEvents.filter((t) =>
+      extIds.includes(t.id)
+    );
+    console.log("cache themes", exts);
+
+    const nonCachedIds = extIds.filter((id) => !exts.find((x) => x.id === id));
+
+    // got non-cached themes?
+    if (nonCachedIds.length) {
+      const filter: NDKFilter = {
+        // @ts-ignore
+        kinds: [KIND_PACKAGE],
+        ids: nonCachedIds,
+      };
+      console.log("fetch themes", filter);
+      const events = await this.ndk!.fetchEvents(
+        filter,
+        { groupable: false },
+        NDKRelaySet.fromRelayUrls(
+          settings.extensions.map((x) => x.relay),
+          this.ndk!
+        )
+      );
+      if (!events) throw new Error("Theme not found");
+
+      // put to cache
+      dbi.addEvents([...events]);
+
+      exts.push(...[...events].map((e) => e.rawEvent()));
+    }
+
+    // drop old cached exts
+    const oldCachedExtIds = cachedExtEvents
+      .filter((x) => !exts.find((e) => e.id === x.id))
+      .map((x) => x.id);
+    dbi.deleteEvents(oldCachedExtIds);
+
+    // filter themes from exts
+    const themeEvents = [...exts].filter((e) =>
       e.tags.find((t) => t.length >= 2 && t[0] === "l" && t[1] === "theme")
     );
     if (!themeEvents.length) throw new Error("No theme assigned");
@@ -118,15 +157,12 @@ export class NostrSiteRenderer implements Renderer {
       const bi = settings.extensions.findIndex((x) => x.event_id === b.id);
       return ai - bi;
     });
+    console.log("got themes", themeEvents);
 
-    console.log(
-      "fetched themes",
-      themeEvents.map((e) => e.rawEvent())
-    );
-
+    // parse
     const themes: Theme[] = [];
     for (const e of themeEvents) {
-      const theme = await parser.parseTheme(e);
+      const theme = await parser.parseTheme(new NDKEvent(this.ndk, e));
       themes.push(theme);
     }
 
@@ -185,14 +221,14 @@ export class NostrSiteRenderer implements Renderer {
     this.connect();
 
     // site event by the website admin
-    const { site, profile } = await this.fetchSite();
-    console.log("site", { site, profile });
+    const site = await this.fetchSite();
+    console.log("site", site);
     if (!site) throw new Error("Nostr site event not found");
 
     const parser = new NostrParser(origin);
 
     // site settings from the database (settingsCache)
-    const settings = parser.parseSite(this.addr, site, profile);
+    const settings = parser.parseSite(this.addr, site);
     console.log("settings", settings);
 
     parser.setConfig(settings.config);

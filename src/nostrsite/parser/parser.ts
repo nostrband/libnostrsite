@@ -51,14 +51,8 @@ export class NostrParser {
     return nip19.npubEncode(e.pubkey);
   }
 
-  public parseSite(
-    addr: SiteAddr,
-    event: NDKEvent | null,
-    profileEvent: NDKEvent | null
-  ): Site {
+  public parseSite(addr: SiteAddr, event: NDKEvent | null): Site {
     if (!event) throw new Error("Site not found");
-
-    const profile = profileEvent ? this.parseProfile(profileEvent) : undefined;
 
     const id = nip19.naddrEncode({
       identifier: addr.name,
@@ -101,7 +95,7 @@ export class NostrParser {
       logo: tv(event, "logo"),
       icon: tv(event, "icon"),
       accent_color: null,
-      cover_image: profile?.profile?.banner || null,
+      cover_image: tv(event, "image"),
       facebook: null,
       twitter: null,
       lang: tv(event, "lang"),
@@ -183,7 +177,9 @@ export class NostrParser {
     };
 
     for (const e of theme.entries) {
-      const name = e.path.includes("/") ? e.path.split("/").pop() || "" : e.path;
+      const name = e.path.includes("/")
+        ? e.path.split("/").pop() || ""
+        : e.path;
       if (!name) {
         console.warn("Bad theme asset path", e);
         continue;
@@ -237,7 +233,9 @@ export class NostrParser {
       codeinjection_foot: null,
       custom_template: null,
       canonical_url: null,
-      excerpt: tv(e, "summary") || await marked.parse(downsize(e.content, { words: 50 })),
+      excerpt:
+        tv(e, "summary") ||
+        (await marked.parse(downsize(e.content, { words: 50 }))),
       reading_time: 0,
       access: true,
       og_image: null,
@@ -324,8 +322,7 @@ export class NostrParser {
     for (const l of post.links) textContent = textContent.replace(l, "");
 
     post.title = downsize(textContent.trim().split("\n")[0], { words: 10 });
-    if (e.content.trim() === post.title?.trim())
-      post.title = null;
+    if (e.content.trim() === post.title?.trim()) post.title = null;
 
     post.images = this.parseImages(post);
     if (!post.feature_image && post.images.length)

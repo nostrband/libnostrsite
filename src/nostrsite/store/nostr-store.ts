@@ -11,7 +11,9 @@ import { RamStore } from "./ram-store";
 import {
   KIND_LONG_NOTE,
   KIND_NOTE,
+  KIND_PACKAGE,
   KIND_PROFILE,
+  KIND_SITE,
   SUPPORTED_KINDS,
 } from "../consts";
 import { NostrParser } from "../parser/parser";
@@ -69,32 +71,27 @@ export class NostrStore extends RamStore {
     return !!this.filters.find((f) => matchFilter(f, e));
   }
 
-  private toNDKEvent(e: DbEvent) {
-    return new NDKEvent(this.ndk, {
-      id: e.id,
-      pubkey: e.pubkey,
-      created_at: e.created_at,
-      kind: e.kind,
-      content: e.content,
-      tags: e.tags,
-      sig: e.sig,
-    });
-  }
-
   private async loadFromDb(limit: number) {
     const events = await dbi.listEvents(limit);
 
-    const badObjectIds = events
-      .filter((e) => !this.matchObject(e))
+    // @ts-ignore
+    const badObjectIds: string[] = events
+      .filter(
+        (e) =>
+          e.kind !== KIND_SITE &&
+          e.kind !== KIND_PACKAGE &&
+          e.kind !== KIND_PROFILE &&
+          !this.matchObject(e)
+      )
       .map((e) => e.id);
     console.log("badObjectIds", badObjectIds);
     await dbi.deleteEvents(badObjectIds);
 
     const objects = events.filter((e) => this.matchObject(e));
-    await this.parseEvents(objects.map((e) => this.toNDKEvent(e)));
+    await this.parseEvents(objects.map((e) => new NDKEvent(this.ndk, e)));
 
     const profiles = events.filter((e) => e.kind === KIND_PROFILE);
-    this.parseProfiles(profiles.map((p) => this.toNDKEvent(p)));
+    this.parseProfiles(profiles.map((p) => new NDKEvent(this.ndk, p)));
 
     let since = 0;
     if (objects.length > 0) {
@@ -187,7 +184,7 @@ export class NostrStore extends RamStore {
   }
 
   private async loadSsr() {
-      await this.fetchAllObjects();
+    await this.fetchAllObjects();
   }
 
   public async load() {
@@ -228,18 +225,7 @@ export class NostrStore extends RamStore {
     // no caching for ssr for now
     if (this.mode === "ssr") return;
 
-    const dbEvents: DbEvent[] = events.map((e) => ({
-      id: e.id || "",
-      pubkey: e.pubkey || "",
-      kind: e.kind || 0,
-      created_at: e.created_at || 0,
-      content: e.content || "",
-      tags: e.tags || [],
-      sig: e.sig || "",
-      d_tag: e.tags.find((t) => t.length >= 2 && t[0] === "d")?.[1] || "",
-    }));
-
-    const promise = dbi.addEvents(dbEvents);
+    const promise = dbi.addEvents(events);
 
     // block if we're not in tab rendering mode
     if (this.mode !== "iife") await promise;
@@ -370,7 +356,6 @@ export class NostrStore extends RamStore {
 
     // assign authors
     for (const post of this.posts) {
-
       // got author already?
       if (post.primary_author) continue;
 
@@ -447,27 +432,39 @@ export class NostrStore extends RamStore {
   }
 
   private async fetchProfiles(pubkeys: string[]) {
-    const relays = [
-      ...(this.settings.include_relays || []),
-      ...(this.settings.admin_relays || []),
-      "wss://relay.nostr.band",
-      "wss://purplepag.es",
-    ];
+    const cachedEvents = await dbi.listKindEvents(KIND_PROFILE, 100);
+    const profiles = cachedEvents
+      .filter((e) => pubkeys.includes(e.pubkey))
+      .map((e) => new NDKEvent(this.ndk, e));
+    console.log("cached profiles", profiles);
 
-    const events = await this.ndk.fetchEvents(
-      {
-        kinds: [KIND_PROFILE],
-        authors: pubkeys,
-      },
-      {},
-      NDKRelaySet.fromRelayUrls(relays, this.ndk)
+    const nonCachedPubkeys = pubkeys.filter(
+      (p) => !profiles.find((e) => e.pubkey === p)
     );
-    console.log("profiles", { events, relays });
-    if (!events) return;
 
-    await this.storeEvents([...events]);
+    if (nonCachedPubkeys.length > 0) {
+      const relays = [
+        ...(this.settings.include_relays || []),
+        ...(this.settings.admin_relays || []),
+        "wss://relay.nostr.band",
+        "wss://purplepag.es",
+      ];
 
-    this.parseProfiles([...events]);
+      const events = await this.ndk.fetchEvents(
+        {
+          kinds: [KIND_PROFILE],
+          authors: pubkeys,
+        },
+        {},
+        NDKRelaySet.fromRelayUrls(relays, this.ndk)
+      );
+      console.log("fetched profiles", { events, relays });
+      if (events) profiles.push(...events);
+    }
+
+    await this.storeEvents([...profiles]);
+
+    this.parseProfiles([...profiles]);
   }
 
   private parseProfiles(events: NDKEvent[]) {
@@ -566,8 +563,8 @@ export class NostrStore extends RamStore {
               // ensure we load profiles
               await this.fetchAuthors();
 
-              // 
-              await this.postProcess();          
+              //
+              await this.postProcess();
             }
           } else {
             if (this.matchObject(e)) events.push(e);

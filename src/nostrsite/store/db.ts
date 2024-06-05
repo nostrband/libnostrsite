@@ -1,3 +1,4 @@
+import { NDKEvent } from "@nostr-dev-kit/ndk";
 import Dexie from "dexie";
 
 export interface DbEvent {
@@ -29,9 +30,20 @@ db.version(2).stores({
 });
 
 export const dbi = {
-  addEvents: async (events: DbEvent[]) => {
+  addEvents: async (events: NDKEvent[]) => {
     try {
-      await db.events.bulkPut(events);
+      const dbEvents: DbEvent[] = events.map((e) => ({
+        id: e.id || "",
+        pubkey: e.pubkey || "",
+        kind: e.kind || 0,
+        created_at: e.created_at || 0,
+        content: e.content || "",
+        tags: e.tags || [],
+        sig: e.sig || "",
+        d_tag: e.tags.find((t) => t.length >= 2 && t[0] === "d")?.[1] || "",
+      }));
+  
+      await db.events.bulkPut(dbEvents);
     } catch (error) {
       console.log(`db addEvents error: ${error}`);
     }
@@ -39,6 +51,16 @@ export const dbi = {
   listEvents: async (limit: number) => {
     try {
       return (await db.events.reverse().sortBy("created_at")).slice(0, limit);
+    } catch (error) {
+      console.log(`db listEvents error: ${error}`);
+      return [];
+    }
+  },
+  listKindEvents: async (kind: number, limit: number) => {
+    try {
+      return (
+        await db.events.where({ kind }).reverse().sortBy("created_at")
+      ).slice(0, limit);
     } catch (error) {
       console.log(`db listEvents error: ${error}`);
       return [];
@@ -64,10 +86,10 @@ export const dbi = {
     try {
       await db.sync.put({
         site_id,
-        syncTimestamp: Date.now()
+        syncTimestamp: Date.now(),
       });
     } catch (error) {
       console.log(`db setSync error: ${error}`);
     }
-  }
+  },
 };
