@@ -16,7 +16,7 @@ export function parseAddr(naddr: string): SiteAddr {
   return {
     name: data.identifier,
     pubkey: data.pubkey,
-    relays: data.relays,
+    relays: data.relays || [],
   };
 }
 

@@ -19,11 +19,13 @@ export interface Site {
 
   name: string,
   admin_pubkey: string,
-  admin_relays?: string[],
+  admin_relays: string[],
 
   origin: string;
 
-  contributor_pubkeys?: string[],
+  contributor_pubkeys: string[],
+  contributor_relays: string[],
+
   include_tags?: { tag: string, value: string }[],
   include_all?: boolean;
   include_manual?: boolean;

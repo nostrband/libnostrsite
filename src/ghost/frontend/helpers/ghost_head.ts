@@ -340,7 +340,7 @@ export default async function ghost_head(options: any) {
 
     // FIXME nostr-login testing
     head.push(`
-    <script src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
+    <script async src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
       data-perms="sign_event:1"
     ></script>
     <script>
@@ -372,7 +372,7 @@ export default async function ghost_head(options: any) {
     }
 
     const pagination = root.pagination;
-    const paginationUrl = (page: boolean) => {
+    const paginationUrl = (page: number) => {
       return urlUtils.createUrl(`/page/${page}`);
     };
     if (pagination?.prev) {

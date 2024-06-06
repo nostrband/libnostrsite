@@ -2,5 +2,5 @@
 export interface SiteAddr {
   pubkey: string,
   name: string,
-  relays: string[] | undefined
+  relays: string[]
 }

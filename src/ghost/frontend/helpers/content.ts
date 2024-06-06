@@ -39,6 +39,8 @@ function restrictedCta(options: any) {
 export default function content(options: any = {}) {
   const { SafeString } = getRenderer(options);
 
+  const site = options.data.site;
+
   // @ts-ignore
   const self: any = this;
 
@@ -69,10 +71,16 @@ export default function content(options: any = {}) {
     html = new SafeString(self.html);
   }
 
+  const relays = [...site.contributor_relays];
+  // some contributor relays to fetch their replies
+  if (relays.length > 3) relays.length = 3;
+  // common relays for comments from other people,
+  // FIXME use inbox relays of contributors!
+  relays.push("wss://relay.damus.io/", "wss://nos.lol");
+
   html += `<zap-threads 
   anchor="${self.id}"
-  user=""
-  relays="wss://relay.nostr.band,wss://relay.damus.io/,wss://nos.lol"
+  relays="${relays.join(',')}"
   />`;
 
   return new SafeString(html);

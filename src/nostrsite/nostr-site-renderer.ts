@@ -16,18 +16,24 @@ import { Site } from "./types/site";
 import { ThemeEngine } from "./theme-engine";
 import { Theme } from "./types/theme";
 import { NostrStore } from "./store/nostr-store";
-import { JQUERY, KIND_PACKAGE, KIND_SITE } from "./consts";
+import {
+  JQUERY,
+  KIND_PACKAGE,
+  KIND_SITE,
+  OUTBOX_RELAYS,
+} from "./consts";
 import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
-import { isBlossomUrl } from "./utils";
+import { fetchOutboxRelays, isBlossomUrl } from "./utils";
 import { dbi } from "./store/db";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
   public settings?: Site;
   public theme?: Theme;
+  private options?: RenderOptions;
   private ndk?: NDK;
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
@@ -52,45 +58,87 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   private async connect() {
+    // initially we connect to the relays from site addr,
+    // buy also to outbox relays to find the relay lists of
+    // the site admin in case addr.relays aren't responding
+
+    // outbox relays
+    const relays = OUTBOX_RELAYS;
+
+    // addr relays
+    if (this.addr.relays) relays.push(...this.addr.relays);
+
     this.ndk = new NDK({
-      // FIXME also add some seed relays?
-      explicitRelayUrls: this.addr.relays,
+      explicitRelayUrls: relays,
     });
 
-    await this.ndk.connect();
+    // don't wait
+    this.ndk.connect();
   }
 
   private async fetchSite() {
     // cached sites
-    const sites = await dbi.listKindEvents(KIND_SITE, 10);
+    if (this.options!.mode !== "ssr") {
+      const sites = await dbi.listKindEvents(KIND_SITE, 10);
 
-    // find cached site
-    const cachedSite = sites.find(
-      (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.name
-    );
-    console.log("cache site", cachedSite, sites);
+      // find cached site
+      const cachedSite = sites.find(
+        (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.name
+      );
+      console.log("cache site", cachedSite, sites);
 
-    // drop old cached sites, if any
-    const oldSiteIds = sites
-      .filter((s) => s.id !== cachedSite?.id)
-      .map((s) => s.id);
-    dbi.deleteEvents(oldSiteIds);
+      // drop old cached sites, if any
+      const oldSiteIds = sites
+        .filter((s) => s.id !== cachedSite?.id)
+        .map((s) => s.id);
+      dbi.deleteEvents(oldSiteIds);
 
-    // got cached one
-    if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
+      // got cached one
+      if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
+    }
 
-    // fetch site object and it's author's profile in parallel
-    const site = await this.ndk!.fetchEvent(
-      {
-        // @ts-ignore
-        kinds: [KIND_SITE],
-        authors: [this.addr.pubkey],
-        "#d": [this.addr.name],
-      },
-      { groupable: false }
-    );
+    // helper
+    const fetchFromRelays = async (relayUrls: string[]) => {
+      return await this.ndk!.fetchEvent(
+        {
+          // @ts-ignore
+          kinds: [KIND_SITE],
+          authors: [this.addr.pubkey],
+          "#d": [this.addr.name],
+        },
+        { groupable: false },
+        NDKRelaySet.fromRelayUrls(relayUrls, this.ndk!)
+      )
+    };
 
-    if (site) dbi.addEvents([site]);
+    // FIXME create some purplepag.es-like relay that
+    // only stores site events
+    const relays = [];
+    if (this.addr.relays) relays.push(...this.addr.relays);
+
+    // fetch site object
+    let site = await fetchFromRelays(relays);
+
+    // not found on expected relays? look through the
+    // admin outbox relays
+    if (!site) {
+      console.log("site not found on addr relays", this.addr.relays);
+
+      const outboxRelays = await fetchOutboxRelays(this.ndk!, [this.addr.pubkey]);
+      console.log("site admin outbox relays", outboxRelays);
+      if (!outboxRelays.length) {
+        console.log("Failed to find outbox relays for", this.addr.pubkey);
+      } else {
+        site = await fetchFromRelays(outboxRelays);
+
+        // replace the site relays
+        if (site) this.addr.relays = outboxRelays;
+      }
+    }
+
+    if (this.options!.mode !== "ssr") {
+      if (site) dbi.addEvents([site]);
+    }
 
     return site;
   }
@@ -105,22 +153,33 @@ export class NostrSiteRenderer implements Renderer {
     parser: NostrParser
   ): Promise<Theme[]> {
     const extIds = settings.extensions.map((x) => x.event_id);
+    const exts: NostrEvent[] = [];
+    if (this.options!.mode !== "ssr") {
+      const cachedExtEvents = await dbi.listKindEvents(KIND_PACKAGE, 10);
 
-    const cachedExtEvents = await dbi.listKindEvents(KIND_PACKAGE, 10);
+      exts.push(...cachedExtEvents.filter((t) => extIds.includes(t.id)));
+      console.log("cache themes", exts);
 
-    const exts: NostrEvent[] = cachedExtEvents.filter((t) =>
-      extIds.includes(t.id)
-    );
-    console.log("cache themes", exts);
+      // drop old cached exts
+      const oldCachedExtIds = cachedExtEvents
+        .filter((x) => !exts.find((e) => e.id === x.id))
+        .map((x) => x.id);
+      dbi.deleteEvents(oldCachedExtIds);
 
-    const nonCachedIds = extIds.filter((id) => !exts.find((x) => x.id === id));
+      // get non-cached ext ids to fetch from relays
+      const nonCachedIds = extIds.filter(
+        (id) => !exts.find((x) => x.id === id)
+      );
+      extIds.length = 0;
+      extIds.push(...nonCachedIds);
+    }
 
     // got non-cached themes?
-    if (nonCachedIds.length) {
+    if (extIds.length) {
       const filter: NDKFilter = {
         // @ts-ignore
         kinds: [KIND_PACKAGE],
-        ids: nonCachedIds,
+        ids: extIds,
       };
       console.log("fetch themes", filter);
       const events = await this.ndk!.fetchEvents(
@@ -134,16 +193,10 @@ export class NostrSiteRenderer implements Renderer {
       if (!events) throw new Error("Theme not found");
 
       // put to cache
-      dbi.addEvents([...events]);
+      if (this.options!.mode !== "ssr") dbi.addEvents([...events]);
 
       exts.push(...[...events].map((e) => e.rawEvent()));
     }
-
-    // drop old cached exts
-    const oldCachedExtIds = cachedExtEvents
-      .filter((x) => !exts.find((e) => e.id === x.id))
-      .map((x) => x.id);
-    dbi.deleteEvents(oldCachedExtIds);
 
     // filter themes from exts
     const themeEvents = [...exts].filter((e) =>
@@ -213,6 +266,8 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   public async start(options: RenderOptions) {
+    this.options = options;
+
     const { origin } = options;
 
     // ndk connect to site relays
@@ -307,9 +362,10 @@ export class NostrSiteRenderer implements Renderer {
 
     return new Promise((ok) => {
       const sub = this.ndk!.subscribe(filter);
-      sub.on("event", (e: NDKEvent) => {
+      sub.on("event", async (e: NDKEvent) => {
         if (e.created_at! <= this.settings!.event.created_at) return;
         console.log("sw got updated site, restarting");
+        if (this.options!.mode !== "ssr") await dbi.addEvents([e]);
         sub.stop();
         ok();
       });

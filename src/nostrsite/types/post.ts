@@ -43,8 +43,11 @@ export interface Post {
   // source content in markdown syntax
   markdown?: string;
 
-  // all urls
+  // http urls
   links: string[];
+
+  // nostr: urls
+  nostrLinks: string[];
 
   // all image urls
   images: string[];

@@ -76,6 +76,8 @@ export class NostrParser {
       origin: this.origin || (url ? url.origin : ""),
 
       contributor_pubkeys: tags(event, "p").map((t) => t[1]),
+      contributor_relays: [],
+
       include_tags: tags(event, "include", 3).map((t) => ({
         tag: t[1],
         value: t[2],
@@ -127,6 +129,19 @@ export class NostrParser {
       config: new Map(),
       custom: new Map(),
     };
+
+    // admin is the only contributor?
+    if (
+      !settings.contributor_pubkeys.length ||
+      (settings.contributor_pubkeys.length === 1 &&
+        settings.contributor_pubkeys[0] === addr.pubkey)
+    ) {
+      settings.contributor_pubkeys = [addr.pubkey];
+      settings.contributor_relays = addr.relays;
+    }
+
+    if (settings.include_relays && settings.include_relays.length > 0)
+      settings.contributor_relays = settings.include_relays;
 
     for (const c of tags(event, "config", 3)) {
       settings.config.set(c[1], c[2]);
@@ -254,6 +269,7 @@ export class NostrParser {
       markdown: e.content,
       images: [],
       links: this.parseTextLinks(e.content),
+      nostrLinks: this.parseNostrLinks(e.content),
       event: e.rawEvent(),
       show_title_and_feature_image: true,
     };
@@ -278,7 +294,7 @@ export class NostrParser {
       uuid: e.id,
       url: "",
       title: "",
-      html: await marked.parse(e.content),
+      html: null,
       comment_id: e.id,
       feature_image: "",
       feature_image_alt: null,
@@ -295,7 +311,7 @@ export class NostrParser {
       codeinjection_foot: null,
       custom_template: null,
       canonical_url: null,
-      excerpt: downsize(e.content, { words: 50 }),
+      excerpt: null,
       reading_time: 0,
       access: true,
       og_image: null,
@@ -311,23 +327,45 @@ export class NostrParser {
       tags: [],
       primary_author: null,
       authors: [],
-      markdown: e.content,
+      markdown: "",
       images: [],
       links: this.parseTextLinks(e.content),
+      nostrLinks: this.parseNostrLinks(e.content),
       event: e.rawEvent(),
       show_title_and_feature_image: true,
     };
 
-    let textContent = e.content;
-    for (const l of post.links) textContent = textContent.replace(l, "");
-
-    post.title = downsize(textContent.trim().split("\n")[0], { words: 10 });
-    if (e.content.trim() === post.title?.trim()) post.title = null;
-
+    // parse images, set feature image
     post.images = this.parseImages(post);
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
+    // only one image url at the start? cut it, we're
+    // using it in feature_image
+    let content = e.content;
+    if (
+      post.images.length === 1 &&
+      (content.trim().startsWith(post.images[0]) ||
+        content.trim().endsWith(post.images[0]))
+    ) {
+      content = content.replace(post.images[0], "");
+    }
+
+    // now format content w/o the feature_image
+    post.markdown = content;
+    post.html = await marked.parse(content);
+
+    // now cut all links to create a title and excerpt
+    let textContent = content;
+    for (const l of post.links) textContent = textContent.replace(l, "");
+    for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
+    post.excerpt = downsize(textContent, { words: 50 });
+    post.title = downsize(textContent.trim().split("\n")[0], { words: 10 });
+
+    // short content (title === content) => empty title
+    if (content.trim() === post.title?.trim()) post.title = null;
+
+    // podcasts
     if (this.getConf("podcast_media_in_og_description") === "true") {
       post.og_description =
         post.links.find((u) => this.isVideoUrl(u) || this.isAudioUrl(u)) ||
@@ -400,9 +438,15 @@ export class NostrParser {
 
   private parseTextLinks(text: string): string[] {
     if (!text) return [];
-    const IMAGE_RX =
+    const RX =
       /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
-    return [...new Set([...text.matchAll(IMAGE_RX)].map((m) => m[0]))];
+    return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
+  }
+
+  private parseNostrLinks(text: string): string[] {
+    if (!text) return [];
+    const RX = /nostr:[^\s\?:]+/gi;
+    return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
   }
 
   private isImageUrl(u: string) {

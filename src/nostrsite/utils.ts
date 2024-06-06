@@ -1,3 +1,5 @@
+import NDK, { NDKRelaySet } from "@nostr-dev-kit/ndk";
+import { KIND_CONTACTS, KIND_RELAYS, OUTBOX_RELAYS } from ".";
 
 export function isBlossomUrl(u: string) {
   const url = new URL(u);
@@ -39,3 +41,41 @@ export class PromiseQueue {
     if (this.queue.length > 0) this.execute()
   }
 }
+
+export async function fetchOutboxRelays(ndk: NDK, pubkeys: string[]) {
+  const events = await ndk.fetchEvents(
+    {
+      // @ts-ignore
+      kinds: [KIND_CONTACTS, KIND_RELAYS],
+      authors: pubkeys,
+    },
+    { groupable: false },
+    NDKRelaySet.fromRelayUrls(OUTBOX_RELAYS, ndk)
+  );
+
+  const writeRelays = [];
+
+  for (const e of events) {
+    if (e.kind === KIND_RELAYS) {
+      writeRelays.push(
+        ...e.tags
+          .filter(
+            (t) =>
+              t.length >= 2 &&
+              t[0] === "r" &&
+              (t.length === 2 || t[2] === "write")
+          )
+          .map((t) => t[1])
+      );
+    } else {
+      try {
+        const relays = JSON.parse(e.content);
+        for (const url in relays) {
+          if (relays[url].write) writeRelays.push(url);
+        }
+      } catch {}
+    }
+  }
+
+  return [...new Set(writeRelays)];
+} 

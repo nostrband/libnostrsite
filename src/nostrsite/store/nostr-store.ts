@@ -14,6 +14,7 @@ import {
   KIND_PACKAGE,
   KIND_PROFILE,
   KIND_SITE,
+  OUTBOX_RELAYS,
   SUPPORTED_KINDS,
 } from "../consts";
 import { NostrParser } from "../parser/parser";
@@ -25,7 +26,7 @@ import { StoreObject } from "../types/store";
 import { matchFilter, nip19 } from "nostr-tools";
 import { slugify } from "../../ghost/helpers/slugify";
 import { DbEvent, dbi } from "./db";
-import { PromiseQueue, RenderMode } from "..";
+import { PromiseQueue, RenderMode, fetchOutboxRelays } from "..";
 
 const MAX_OBJECTS = 10000;
 
@@ -110,8 +111,25 @@ export class NostrStore extends RamStore {
     return since;
   }
 
+  private async fetchRelays() {
+    // already known?
+    if (this.settings.contributor_relays.length > 0)
+      return;
+
+    // fetch outbox for contributors
+    this.settings.contributor_relays = await fetchOutboxRelays(
+      this.ndk,
+      this.settings.contributor_pubkeys
+    );
+
+    console.log("contributor outbox relays", this.settings.contributor_relays);
+  }
+
   private async fetchObjects(since?: number, until?: number, sub?: boolean) {
     console.log(Date.now(), "fetch objects", since, until, sub);
+
+    // ensure relays are known
+    await this.fetchRelays();
 
     const promises: Promise<void>[] = [];
 
@@ -424,7 +442,11 @@ export class NostrStore extends RamStore {
       f["#d"] = [slugId];
     }
 
-    const event = await this.ndk.fetchEvent(f);
+    const event = await this.ndk.fetchEvent(
+      f,
+      { groupable: false },
+      NDKRelaySet.fromRelayUrls(this.settings.contributor_relays, this.ndk)
+    );
     console.log("fetchObject got", slugId, objectType, event);
     if (!event || !this.matchObject(event.rawEvent())) return undefined;
 
@@ -443,12 +465,7 @@ export class NostrStore extends RamStore {
     );
 
     if (nonCachedPubkeys.length > 0) {
-      const relays = [
-        ...(this.settings.include_relays || []),
-        ...(this.settings.admin_relays || []),
-        "wss://relay.nostr.band",
-        "wss://purplepag.es",
-      ];
+      const relays = [...this.settings.contributor_relays, ...OUTBOX_RELAYS];
 
       const events = await this.ndk.fetchEvents(
         {
@@ -533,9 +550,10 @@ export class NostrStore extends RamStore {
       return;
     }
 
-    // FIXME implement proper relay selection logic
-    const relays = this.settings.include_relays ||
-      this.settings.admin_relays || ["wss://relay.nostr.band"];
+    const relays = [...this.settings.contributor_relays];
+
+    // limit number of relays if we care about latency
+    if (this.mode === "iife") relays.length = 3;
 
     const sub = this.ndk.subscribe(
       filters,
