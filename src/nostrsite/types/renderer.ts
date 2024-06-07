@@ -16,6 +16,7 @@ export type RenderOptions = {
   mode?: RenderMode;
   origin?: string; // for iife/sw pass the origin from globalThis
   ssrIndexScriptUrl?: string; // default /index.js
+  maxObjects?: number;
 }
 
 // IMPORTANT: any changes here aside from additions will result

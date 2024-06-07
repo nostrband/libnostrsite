@@ -1,5 +1,5 @@
 // @ts-ignore
-import downsize from "downsize";
+import downsize from "downsize-cjs";
 
 import { isNav, isPost, isTag, isUser } from "../../ghost/frontend/utils/checks";
 import { NostrSiteUrlUtils } from "./urlutils";

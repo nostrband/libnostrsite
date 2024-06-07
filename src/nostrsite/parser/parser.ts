@@ -11,7 +11,7 @@ import { Author } from "../types/author";
 import { Theme } from "../types/theme";
 import { DateTime } from "luxon";
 // @ts-ignore
-import downsize from "downsize";
+import downsize from "downsize-cjs";
 import { SiteAddr } from "../types/site-addr";
 import { slugify } from "../../ghost/helpers/slugify";
 

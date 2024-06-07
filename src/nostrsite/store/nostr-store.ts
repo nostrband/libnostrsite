@@ -36,6 +36,7 @@ export class NostrStore extends RamStore {
   private settings: Site;
   private parser: NostrParser;
   private filters: NDKFilter[];
+  private maxObjects: number = MAX_OBJECTS;
   private subs: NDKSubscription[] = [];
 
   constructor(
@@ -113,14 +114,20 @@ export class NostrStore extends RamStore {
 
   private async fetchRelays() {
     // already known?
-    if (this.settings.contributor_relays.length > 0)
-      return;
+    if (this.settings.contributor_relays.length > 0) return;
 
     // fetch outbox for contributors
     this.settings.contributor_relays = await fetchOutboxRelays(
       this.ndk,
       this.settings.contributor_pubkeys
     );
+
+    // limit number of relays if we care about latency
+    if (this.mode === "iife")
+      this.settings.contributor_relays.length = Math.min(
+        this.settings.contributor_relays.length,
+        3
+      );
 
     console.log("contributor outbox relays", this.settings.contributor_relays);
   }
@@ -135,6 +142,8 @@ export class NostrStore extends RamStore {
 
     if (this.settings.include_all || !!this.settings.include_tags?.length) {
       promises.push(this.fetchByFilter(since, until, sub));
+    } else {
+      console.warn("No include tags specified!");
     }
 
     // if (this.settings.include_manual) {
@@ -175,13 +184,13 @@ export class NostrStore extends RamStore {
         break;
       }
       until = newUntil;
-    } while (this.posts.length < MAX_OBJECTS);
+    } while (this.posts.length < this.maxObjects);
 
     console.log(Date.now(), "done full sync, posts", this.posts.length);
   }
 
   private async loadAll() {
-    let since = await this.loadFromDb(MAX_OBJECTS);
+    let since = await this.loadFromDb(this.maxObjects);
 
     const sync = await dbi.getSync();
     const synced = sync && sync.site_id === this.settings.event.id;
@@ -205,7 +214,10 @@ export class NostrStore extends RamStore {
     await this.fetchAllObjects();
   }
 
-  public async load() {
+  public async load(maxObjects: number = 0) {
+    if (maxObjects) this.maxObjects = maxObjects;
+
+    // FIXME for testing
     this.recommendations = recommendations;
 
     if (this.mode === "iife") {
@@ -472,7 +484,7 @@ export class NostrStore extends RamStore {
           kinds: [KIND_PROFILE],
           authors: pubkeys,
         },
-        {},
+        { groupable: false },
         NDKRelaySet.fromRelayUrls(relays, this.ndk)
       );
       console.log("fetched profiles", { events, relays });
@@ -497,7 +509,7 @@ export class NostrStore extends RamStore {
       const f: NDKFilter = {
         authors: this.settings.contributor_pubkeys,
         kinds: [kind],
-        limit: this.mode !== "iife" ? 1000 : 50,
+        limit: this.mode !== "iife" ? Math.min(this.maxObjects, 1000) : 50,
       };
       if (tag) {
         // @ts-ignore
@@ -552,12 +564,9 @@ export class NostrStore extends RamStore {
 
     const relays = [...this.settings.contributor_relays];
 
-    // limit number of relays if we care about latency
-    if (this.mode === "iife") relays.length = 3;
-
     const sub = this.ndk.subscribe(
       filters,
-      {},
+      { groupable: false },
       NDKRelaySet.fromRelayUrls(relays, this.ndk),
       false // auto-start
     );

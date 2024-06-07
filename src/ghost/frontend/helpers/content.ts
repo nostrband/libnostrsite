@@ -11,7 +11,7 @@
 // Dev flag feature: In case of restricted content access for member-only posts, shows CTA box
 
 // @ts-ignore
-import downsize from "downsize";
+import downsize from "downsize-cjs";
 import merge from "lodash-es/merge";
 import isUndefined from "lodash-es/isUndefined";
 import { getRenderer } from "../services/renderer";

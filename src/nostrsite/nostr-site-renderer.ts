@@ -72,8 +72,8 @@ export class NostrSiteRenderer implements Renderer {
       explicitRelayUrls: relays,
     });
 
-    // don't wait
-    this.ndk.connect();
+    // let caller decide whether they'd block on it or not
+    return this.ndk.connect();
   }
 
   private async fetchSite() {
@@ -99,6 +99,7 @@ export class NostrSiteRenderer implements Renderer {
 
     // helper
     const fetchFromRelays = async (relayUrls: string[]) => {
+      console.log("fetching site from relays", relayUrls);
       return await this.ndk!.fetchEvent(
         {
           // @ts-ignore
@@ -122,7 +123,7 @@ export class NostrSiteRenderer implements Renderer {
     // not found on expected relays? look through the
     // admin outbox relays
     if (!site) {
-      console.log("site not found on addr relays", this.addr.relays);
+      console.warn("site not found on addr relays", this.addr.relays);
 
       const outboxRelays = await fetchOutboxRelays(this.ndk!, [this.addr.pubkey]);
       console.log("site admin outbox relays", outboxRelays);
@@ -300,7 +301,7 @@ export class NostrSiteRenderer implements Renderer {
     // do it in parallel to save some latency
     const [themes] = await Promise.all([
       this.fetchThemes(settings, parser),
-      this.store.load(),
+      this.store.load(options.maxObjects),
     ]);
 
     // now we have everything needed to init the engine
