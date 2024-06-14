@@ -1,3 +1,4 @@
+import { ThemeEngine } from "..";
 import { Author } from "./author";
 import { Pagination } from "./pagination";
 import { Post } from "./post";
@@ -39,6 +40,7 @@ export interface StoreListRequest {
 }
 
 export interface Store {
+  prepare(engine: ThemeEngine): Promise<void>;
   isValidType(type: string): boolean;
   list: (request: StoreListRequest) => Promise<StoreListResponse>;
   get: (
@@ -46,5 +48,6 @@ export interface Store {
     type?: string,
   ) => Promise<StoreObject | undefined>;
   getUrl: (id: string, type?: StoreObjectType) => string | undefined;
+  destroy(): void;
 }
 

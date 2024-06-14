@@ -1,7 +1,7 @@
 // https://stackoverflow.com/a/69190644
 // with my special sause for async and defer
-async function executeScriptElements() {
-  const scriptElements = document.querySelectorAll("script");
+async function executeScriptElements(doc: Document) {
+  const scriptElements = doc.querySelectorAll("script");
 
   let deferScripts: {
     scriptElement: HTMLElement;
@@ -10,7 +10,7 @@ async function executeScriptElements() {
   }[] = [];
 
   for (const scriptElement of Array.from(scriptElements)) {
-    const clonedElement = document.createElement("script");
+    const clonedElement = doc.createElement("script");
 
     let async = false;
     let defer = false;
@@ -61,8 +61,8 @@ async function executeScriptElements() {
   }
 }
 
-async function waitStyles() {
-  const links = document.getElementsByTagName("link");
+async function waitStyles(doc: Document) {
+  const links = doc.getElementsByTagName("link");
 
   const promises: Promise<void>[] = [];
   for (const link of Array.from(links)) {
@@ -83,7 +83,7 @@ async function waitStyles() {
   return Promise.all(promises);
 }
 
-export async function setHtml(html: string) {
+export async function setHtml(html: string, doc?: Document, win?: Window) {
   // NOTE: document.write is sync method that produces lots of warning due
   // to browser fetching sync scripts within the 'write', browser
   // may also block those scripts, and this also causes document
@@ -92,6 +92,9 @@ export async function setHtml(html: string) {
   // document.write(html);
   // document.close();
 
+  doc = doc || document;
+  win = win || window;
+
   // so we're using innerHTML to replace the whole document,
   // but doesn't run the <script>,
   // see: https://developer.mozilla.org/en-US/docs/Web/API/HTMLScriptElement
@@ -99,20 +102,20 @@ export async function setHtml(html: string) {
   // elements execute (typically synchronously), but when inserted using
   // Element.innerHTML or Element.outerHTML, they do not execute at all."
   console.log(Date.now(), "html set", html.length);
-  document.documentElement.innerHTML = html;
+  doc.documentElement.innerHTML = html;
 
   // wait for styles and scripts
-  await Promise.all([waitStyles(), executeScriptElements()]);
+  await Promise.all([waitStyles(doc), executeScriptElements(doc)]);
 
   console.log(Date.now(), "html done");
 
   // make it seem like the document has loaded
   // to trigger those scripts expecting it
-  if (document.readyState === "complete") {
+  if (doc.readyState === "complete") {
     // first 'readystatechange', next DOMContentLoaded, then 'load'
     // dispatching is sync, so these will be processed one by one
-    document.dispatchEvent(new Event("readystatechange"));
-    document.dispatchEvent(new Event("DOMContentLoaded"));
+    doc.dispatchEvent(new Event("readystatechange"));
+    doc.dispatchEvent(new Event("DOMContentLoaded"));
 
     // FIXME: it must be dispatched after all scripts/styles/images
     // are loaded, we must simulate that by parsing our new DOM and
@@ -121,6 +124,6 @@ export async function setHtml(html: string) {
     // event is dispatched on window but it's target is 'document',
     // hopefully we don't have issues with that.
     // More: https://developer.mozilla.org/en-US/docs/Web/API/Window/load_event
-    window.dispatchEvent(new Event("load"));
+    win.dispatchEvent(new Event("load"));
   }
 }

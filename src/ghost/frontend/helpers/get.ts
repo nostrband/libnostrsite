@@ -146,7 +146,7 @@ export default async function get(resource: string, options: any) {
   apiOptions = parseOptions(config, globals, self, apiOptions);
   apiOptions.context = { member: data.member };
   apiOptions.type = resource;
-  console.log("get", { resource, options, apiOptions }, apiOptions.filter);
+  console.log("get", { resource, options: {...options}, apiOptions }, apiOptions.filter);
   try {
 
     const response = await store.list(apiOptions);

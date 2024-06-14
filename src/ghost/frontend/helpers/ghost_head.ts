@@ -333,13 +333,14 @@ export default async function ghost_head(options: any) {
     </script>
   `);
 
-    // FIXME zapthreads testing
-    head.push(`
+    if (site.config.get("no_default_plugins") === "true") {
+      console.log("default plugins turned off");
+    } else {
+      head.push(`
     <script type="text/javascript" async src="https://unpkg.com/zapthreads/dist/zapthreads.iife.js"></script>
   `);
 
-    // FIXME nostr-login testing
-    head.push(`
+      head.push(`
     <script async src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
       data-perms="sign_event:1"
     ></script>
@@ -361,6 +362,7 @@ export default async function ghost_head(options: any) {
       });
     </script>
   `);
+    }
 
     // debug('end fetch');
     if (site.icon) {

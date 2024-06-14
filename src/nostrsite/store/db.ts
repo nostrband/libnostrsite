@@ -62,7 +62,7 @@ export const dbi = {
         await db.events.where({ kind }).reverse().sortBy("created_at")
       ).slice(0, limit);
     } catch (error) {
-      console.log(`db listEvents error: ${error}`);
+      console.log(`db listKindEvents error: ${error}`);
       return [];
     }
   },

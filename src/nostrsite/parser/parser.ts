@@ -1,6 +1,6 @@
 import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { Site } from "../types/site";
-import { tags, tv } from "./utlis";
+import { tags, tv } from "./utils";
 import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { marked } from "marked";
@@ -51,7 +51,7 @@ export class NostrParser {
     return nip19.npubEncode(e.pubkey);
   }
 
-  public parseSite(addr: SiteAddr, event: NDKEvent | null): Site {
+  public parseSite(addr: SiteAddr, event: NDKEvent): Site {
     if (!event) throw new Error("Site not found");
 
     const id = nip19.naddrEncode({
@@ -96,7 +96,7 @@ export class NostrParser {
       description: tv(event, "summary"),
       logo: tv(event, "logo"),
       icon: tv(event, "icon"),
-      accent_color: null,
+      accent_color: tv(event, "color"),
       cover_image: tv(event, "image"),
       facebook: null,
       twitter: null,
@@ -248,9 +248,7 @@ export class NostrParser {
       codeinjection_foot: null,
       custom_template: null,
       canonical_url: null,
-      excerpt:
-        tv(e, "summary") ||
-        (await marked.parse(downsize(e.content, { words: 50 }))),
+      excerpt: tv(e, "summary"), //  || (await marked.parse(downsize(e.content, { words: 50 })))
       reading_time: 0,
       access: true,
       og_image: null,
@@ -366,19 +364,18 @@ export class NostrParser {
     if (content.trim() === post.title?.trim()) post.title = null;
 
     // podcasts
-    if (this.getConf("podcast_media_in_og_description") === "true") {
-      post.og_description =
-        post.links.find((u) => this.isVideoUrl(u) || this.isAudioUrl(u)) ||
-        null;
-    }
+    // if (this.getConf("podcast_media_in_og_description") === "true") {
+    post.og_description =
+      post.links.find((u) => this.isVideoUrl(u) || this.isAudioUrl(u)) || null;
+    // }
 
     return post;
   }
 
-  private getConf(name: string): string | undefined {
-    if (!this.config) return "";
-    return this.config.get(name);
-  }
+  // private getConf(name: string): string | undefined {
+  //   if (!this.config) return "";
+  //   return this.config.get(name);
+  // }
 
   public parseHashtags(e: NDKEvent): string[] {
     return tags(e, "t").map((tv) => tv[1]);

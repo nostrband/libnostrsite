@@ -19,6 +19,7 @@ const messages = {
 };
 
 export default function foreach(items: any, options: any) {
+  console.log("foreach", items);
   if (!options) {
     console.warn(tpl(messages.iteratorNeeded));
   }
@@ -101,6 +102,7 @@ export default function foreach(items: any, options: any) {
         frame.contextPath = contextPath + field;
       }
     }
+    console.log("foreach frame", { ...frame });
 
     output =
       output +

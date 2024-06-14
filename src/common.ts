@@ -1,12 +1,14 @@
 import { setHtml } from "./html";
 import { nip19 } from "nostr-tools";
-import { KIND_SITE } from "./nostrsite/consts";
+import { KIND_PROFILE, KIND_SITE, OUTBOX_RELAYS } from "./nostrsite/consts";
 import { NostrSiteRenderer } from "./nostrsite/nostr-site-renderer";
 import { SiteAddr } from "./nostrsite/types/site-addr";
-import NDK from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NDKRelaySet, NostrEvent } from "@nostr-dev-kit/ndk";
+import { slugify } from "./ghost/helpers/slugify";
+import { Store } from ".";
+import { toRGBString } from "./color";
 
 export function parseAddr(naddr: string): SiteAddr {
-
   const { type, data } = nip19.decode(naddr);
   if (type !== "naddr" || data.kind !== KIND_SITE || !data.pubkey.trim()) {
     console.log("Bad addr: ", type, data);
@@ -43,7 +45,7 @@ export async function getMetaAddr(): Promise<SiteAddr | undefined> {
   return undefined;
 }
 
-export async function renderCurrentPage() {
+export async function renderCurrentPage(path = "") {
   // read-only thing, but SW should re-fetch
   // it and update HBS object if something changes
   const addr = await getMetaAddr();
@@ -51,23 +53,20 @@ export async function renderCurrentPage() {
   if (!addr) throw new Error("No nostr site addr");
 
   const start = Date.now();
-  const renderer = new NostrSiteRenderer(addr);
+  const renderer = new NostrSiteRenderer();
   await renderer.start({
-    origin: window.location.origin
+    addr,
+    origin: window.location.origin,
   });
   const t1 = Date.now();
   console.log("renderer created in ", t1 - start);
 
   // render using hbs and replace document.html
-  const { result } = await renderer.render(document.location.pathname);
+  path = path || document.location.pathname;
+  const { result } = await renderer.render(path);
   //  console.log("result html size", result.length, setHtml);
   const t2 = Date.now();
-  console.log(
-    "renderer rendered ",
-    document.location.pathname,
-    " in ",
-    t2 - t1
-  );
+  console.log("renderer rendered ", path, " in ", t2 - t1);
   await setHtml(result);
   const t3 = Date.now();
   console.log("renderer setHtml in ", t3 - t2);
@@ -97,4 +96,150 @@ export async function fetchNostrSite(addr: SiteAddr) {
   }
 
   return event ? event.rawEvent() : undefined;
+}
+
+export async function fetchProfile(ndk: NDK, pubkey: string) {
+  return await ndk.fetchEvent(
+    {
+      kinds: [KIND_PROFILE],
+      authors: [pubkey],
+    },
+    { groupable: false },
+    NDKRelaySet.fromRelayUrls(OUTBOX_RELAYS, ndk)
+  );
+}
+
+export async function prepareSite(
+  ndk: NDK,
+  adminPubkey: string,
+  options: {
+    contributorPubkeys?: string[];
+    kinds?: number[];
+    hashtags?: string[];
+    theme?: { id: string; hash: string; relay: string; name: string };
+  }
+) {
+  const contributorPubkey =
+    options.contributorPubkeys && options.contributorPubkeys.length
+      ? options.contributorPubkeys[0]
+      : adminPubkey;
+
+  const profile = await fetchProfile(ndk, contributorPubkey);
+  if (!profile) throw new Error("Failed to fetch profile");
+
+  const meta = JSON.parse(profile.content);
+  console.log(Date.now(), "meta", meta);
+
+  const name = meta.name || meta.display_name;
+  console.log("name", name.toLowerCase());
+
+  let slug = slugify(name).trim();
+  if (!slug)
+    slug = slugify(meta.nip05.split("@")[0] || meta.lud16.split("@")[0]);
+  if (!slug) throw new Error("No name");
+
+  const siteEvent: NostrEvent = {
+    pubkey: adminPubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    kind: KIND_SITE,
+    content: "",
+    tags: [
+      ["d", slug],
+      ["name", name || "Nostr site"],
+      ["title", meta.display_name || meta.name || "Nostr site"],
+      ["summary", meta.about || ""],
+      ["icon", meta.picture || ""],
+      ["image", meta.banner || ""],
+      ["p", contributorPubkey],
+      ["z", "pro.npub.v1"],
+      ["logo", meta.picture || ""],
+      // ["lang", "en"],
+      // ["meta_title", ""],
+      // ["meta_description", ""],
+      // ["og_title", ""],
+      // ["og_description", ""],
+      // ["og_image", ""],
+      // ["twitter_image", ""],
+      // ["twitter_title", ""],
+      // ["twitter_description", ""],
+
+      // ["config", "hashtags", ""],
+
+      ["nav", "/", "Home"],
+    ],
+  };
+
+  const kinds = [...(options.kinds || [])];
+  if (!kinds.length) kinds.push(1);
+  siteEvent.tags.push(...kinds.map((k) => ["kind", "" + k]));
+
+  const hashtags = [...(options.hashtags || [])];
+  if (hashtags.length)
+    siteEvent.tags.push(...hashtags.map((h) => ["include", "t", h]));
+  else siteEvent.tags.push(["include", "*"]);
+
+  if (options.theme)
+    siteEvent.tags.push([
+      "x",
+      options.theme.id,
+      options.theme.relay,
+      options.theme.hash,
+      options.theme.name,
+    ]);
+
+  const color = toRGBString(contributorPubkey, {
+    hue: [0, 360],
+    sat: [50, 100],
+    lit: [25, 75],
+  });
+  siteEvent.tags.push(["color", color]);
+
+  return siteEvent;
+}
+
+export async function prepareSiteByContent(
+  site: NostrEvent | NDKEvent,
+  store: Store
+) {
+  let topTags = site.tags
+    .filter((t) => t.length >= 3 && t[0] === "include" && t[1] === "t")
+    .map((t) => t[2]);
+  if (topTags.length <= 1) {
+    const list = await store.list({ type: "posts" });
+
+    const hashtagCounts = new Map<string, number>();
+    for (const p of list.posts!) {
+      p.event.tags
+        .filter((t: string[]) => t.length > 1 && t[0] === "t")
+        .map((t: string[]) => t[1])
+        .forEach((t) => {
+          let c = hashtagCounts.get(t) || 0;
+          c++;
+          hashtagCounts.set(t, c);
+        });
+    }
+    console.log("hashtag counts", hashtagCounts);
+
+    const top = [...hashtagCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map((t) => t[0]);
+
+    if (top.length > 3) top.length = 3;
+
+    console.log("top hashtags", top);
+
+    topTags = top;
+  }
+
+  for (const t of topTags) {
+    // navigation
+    site.tags.push([
+      "nav",
+      `/tag/${t}`,
+      t.charAt(0).toUpperCase() + t.slice(1),
+    ]);
+
+    // site hashtags for discovery
+    site.tags.push(["t", t]);
+  }
 }

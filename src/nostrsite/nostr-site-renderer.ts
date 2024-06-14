@@ -16,18 +16,14 @@ import { Site } from "./types/site";
 import { ThemeEngine } from "./theme-engine";
 import { Theme } from "./types/theme";
 import { NostrStore } from "./store/nostr-store";
-import {
-  JQUERY,
-  KIND_PACKAGE,
-  KIND_SITE,
-  OUTBOX_RELAYS,
-} from "./consts";
+import { JQUERY, KIND_PACKAGE, KIND_SITE, OUTBOX_RELAYS } from "./consts";
 import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import { fetchOutboxRelays, isBlossomUrl } from "./utils";
 import { dbi } from "./store/db";
+import { Store } from ".";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -37,11 +33,18 @@ export class NostrSiteRenderer implements Renderer {
   private ndk?: NDK;
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
-  private store?: NostrStore;
+  private store?: Store;
+  private parser?: NostrParser;
+  private config?: any;
   private hasStarted: boolean = false;
 
-  constructor(addr: SiteAddr) {
-    this.addr = addr;
+  constructor() {
+    // empty at the start
+    this.addr = {
+      name: "",
+      pubkey: "",
+      relays: [],
+    };
   }
 
   public getAddr() {
@@ -76,9 +79,13 @@ export class NostrSiteRenderer implements Renderer {
     return this.ndk.connect();
   }
 
+  private useCache() {
+    return this.options!.mode !== "ssr" && this.options!.mode !== "preview";
+  }
+
   private async fetchSite() {
     // cached sites
-    if (this.options!.mode !== "ssr") {
+    if (this.useCache()) {
       const sites = await dbi.listKindEvents(KIND_SITE, 10);
 
       // find cached site
@@ -109,7 +116,7 @@ export class NostrSiteRenderer implements Renderer {
         },
         { groupable: false },
         NDKRelaySet.fromRelayUrls(relayUrls, this.ndk!)
-      )
+      );
     };
 
     // FIXME create some purplepag.es-like relay that
@@ -125,7 +132,9 @@ export class NostrSiteRenderer implements Renderer {
     if (!site) {
       console.warn("site not found on addr relays", this.addr.relays);
 
-      const outboxRelays = await fetchOutboxRelays(this.ndk!, [this.addr.pubkey]);
+      const outboxRelays = await fetchOutboxRelays(this.ndk!, [
+        this.addr.pubkey,
+      ]);
       console.log("site admin outbox relays", outboxRelays);
       if (!outboxRelays.length) {
         console.log("Failed to find outbox relays for", this.addr.pubkey);
@@ -137,7 +146,7 @@ export class NostrSiteRenderer implements Renderer {
       }
     }
 
-    if (this.options!.mode !== "ssr") {
+    if (this.useCache()) {
       if (site) dbi.addEvents([site]);
     }
 
@@ -149,13 +158,10 @@ export class NostrSiteRenderer implements Renderer {
   //   return Promise.resolve([theme, theme1, theme2, theme3]);
   // }
 
-  private async fetchThemes(
-    settings: Site,
-    parser: NostrParser
-  ): Promise<Theme[]> {
+  private async fetchTheme(settings: Site) {
     const extIds = settings.extensions.map((x) => x.event_id);
     const exts: NostrEvent[] = [];
-    if (this.options!.mode !== "ssr") {
+    if (this.useCache()) {
       const cachedExtEvents = await dbi.listKindEvents(KIND_PACKAGE, 10);
 
       exts.push(...cachedExtEvents.filter((t) => extIds.includes(t.id)));
@@ -194,7 +200,7 @@ export class NostrSiteRenderer implements Renderer {
       if (!events) throw new Error("Theme not found");
 
       // put to cache
-      if (this.options!.mode !== "ssr") dbi.addEvents([...events]);
+      if (this.useCache()) dbi.addEvents([...events]);
 
       exts.push(...[...events].map((e) => e.rawEvent()));
     }
@@ -213,18 +219,16 @@ export class NostrSiteRenderer implements Renderer {
     });
     console.log("got themes", themeEvents);
 
-    // parse
-    const themes: Theme[] = [];
-    for (const e of themeEvents) {
-      const theme = await parser.parseTheme(new NDKEvent(this.ndk, e));
-      themes.push(theme);
+    if (themeEvents.length === 0) {
+      throw new Error("No themes");
     }
 
-    console.log("parsed themes", themes);
+    const theme = await this.parser!.parseTheme(
+      new NDKEvent(this.ndk, themeEvents[0])
+    );
+    console.log("parsed theme", theme);
 
-    if ("document" in globalThis) this.preloadThemeAssets(themes[0]);
-
-    return themes;
+    this.setTheme(theme);
   }
 
   private preloadThemeAssets(theme: Theme) {
@@ -266,7 +270,13 @@ export class NostrSiteRenderer implements Renderer {
     }
   }
 
+  private setTheme(theme: Theme) {
+    this.theme = theme;
+    if ("document" in globalThis) this.preloadThemeAssets(this.theme);
+  }
+
   public async start(options: RenderOptions) {
+    this.addr = options.addr;
     this.options = options;
 
     const { origin } = options;
@@ -277,64 +287,101 @@ export class NostrSiteRenderer implements Renderer {
     this.connect();
 
     // site event by the website admin
-    const site = await this.fetchSite();
+    const site = options.site || (await this.fetchSite());
     console.log("site", site);
     if (!site) throw new Error("Nostr site event not found");
 
-    const parser = new NostrParser(origin);
+    this.parser = new NostrParser(origin);
 
     // site settings from the database (settingsCache)
-    const settings = parser.parseSite(this.addr, site);
+    const settings = this.parser.parseSite(this.addr, site);
+    this.settings = settings;
+
+    if (options.noDefaultPlugins)
+      this.settings.config.set("no_default_plugins", "true");
+
     console.log("settings", settings);
 
-    parser.setConfig(settings.config);
+    this.parser.setConfig(settings.config);
 
-    // kinda server-side settings,
-    // FIXME must also come from site event!
-    const config = loader.loadNconf();
-    config.url = new URL(settings.url || "/", origin || settings.origin).href;
+    // FIXME remove this crap
+    this.config = loader.loadNconf();
+    this.config.url = new URL(
+      settings.url || "/",
+      origin || settings.origin
+    ).href;
 
-    this.store = new NostrStore(options.mode, this.ndk!, settings, parser);
+    // event store
+    this.store =
+      options.store ||
+      new NostrStore(options.mode, this.ndk!, settings, this.parser);
 
+    // templating
     this.engine = new ThemeEngine(this.store, options);
 
+    // theme override
+    if (options.theme) this.setTheme(options.theme);
+
     // do it in parallel to save some latency
-    const [themes] = await Promise.all([
-      this.fetchThemes(settings, parser),
-      this.store.load(options.maxObjects),
+    await Promise.all([
+      // externally-supplied theme doesn't need to be fetched
+      options.theme ? Promise.resolve(null) : this.fetchTheme(settings),
+      // externally-supplied store doesn't need to be loaded
+      options.store
+        ? Promise.resolve(null)
+        : (this.store as NostrStore).load(options.maxObjects),
     ]);
 
     // now we have everything needed to init the engine
-    await this.engine.init(settings, themes, config);
+    await this.engine.init(settings, [this.theme!], this.config);
 
     // after data is loaded and engine is initialized,
     // prepare using the engine (assign urls etc)
     await this.store.prepare(this.engine);
 
     // some defaults
-    if (!settings.cover_image && settings.contributor_pubkeys) {
-      for (const pubkey of settings.contributor_pubkeys) {
-        const profile = this.store.getProfile(pubkey);
-        if (profile?.profile?.banner) {
-          settings.cover_image = profile?.profile?.banner;
-          break;
-        }
-      }
-    }
+    // if (!settings.cover_image && settings.contributor_pubkeys) {
+    //   for (const pubkey of settings.contributor_pubkeys) {
+    //     const profile = this.store.getProfile(pubkey);
+    //     if (profile?.profile?.banner) {
+    //       settings.cover_image = profile?.profile?.banner;
+    //       break;
+    //     }
+    //   }
+    // }
     // FIXME somehow derive from profile etc
     // if (!settings.accent_color) {
     //   settings.accent_color = "rgb(255, 0, 149)";
     // }
+    // console.log("updated settings", settings);
+    // this.settings = settings;
 
-    console.log("updated settings", settings);
-    this.settings = settings;
-    if (themes.length) this.theme = themes[0];
+    // if (themes.length) this.theme = themes[0];
 
     if (this.caches && this.caches.themeCache) {
       await this.precacheTheme(this.caches.themeCache);
     }
 
     this.hasStarted = true;
+  }
+
+  public async switchTheme(theme: Theme) {
+    // this.theme = await this.parser!.parseTheme(
+    //   new NDKEvent(this.ndk, themeEvent)
+    // );
+    // console.log("parsed theme", this.theme);
+
+    this.setTheme(theme);
+
+    // new engine for this theme
+    this.engine = new ThemeEngine(this.store!, this.options!);
+
+    // now we have everything needed to init the engine
+    await this.engine.init(this.settings!, [this.theme!], this.config);
+
+    // after data is loaded and engine is initialized,
+    // prepare using the engine (assign urls etc)
+    await this.store!.prepare(this.engine);
   }
 
   public async render(path: string) {
@@ -366,7 +413,7 @@ export class NostrSiteRenderer implements Renderer {
       sub.on("event", async (e: NDKEvent) => {
         if (e.created_at! <= this.settings!.event.created_at) return;
         console.log("sw got updated site, restarting");
-        if (this.options!.mode !== "ssr") await dbi.addEvents([e]);
+        if (this.useCache()) await dbi.addEvents([e]);
         sub.stop();
         ok();
       });

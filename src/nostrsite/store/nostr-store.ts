@@ -60,11 +60,11 @@ export class NostrStore extends RamStore {
     }
   }
 
-  private matchObject(e: DbEvent | NostrEvent) {
+  public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
     if (e.kind === KIND_PROFILE) return false;
     if (e.kind === KIND_NOTE) {
       if (e.tags.find((t) => t.length >= 2 && t[0] === "e")) {
-        console.log("skip reply event", e);
+        console.log("skip reply event", e.id);
         return false;
       }
     }
@@ -123,17 +123,17 @@ export class NostrStore extends RamStore {
     );
 
     // limit number of relays if we care about latency
-    if (this.mode === "iife")
+    if (this.mode === "iife" || this.mode === "preview")
       this.settings.contributor_relays.length = Math.min(
         this.settings.contributor_relays.length,
-        3
+        5
       );
 
     console.log("contributor outbox relays", this.settings.contributor_relays);
   }
 
   private async fetchObjects(since?: number, until?: number, sub?: boolean) {
-    console.log(Date.now(), "fetch objects", since, until, sub);
+    console.warn(Date.now(), "fetch objects", since, until, sub);
 
     // ensure relays are known
     await this.fetchRelays();
@@ -152,27 +152,32 @@ export class NostrStore extends RamStore {
 
     await Promise.all(promises);
 
-    console.log(Date.now(), "fetched objects", since, until, sub);
+    console.warn(Date.now(), "fetched objects", since, until, sub);
   }
 
-  private async loadMinimal() {
+  private async loadIife() {
     // a fast method to get some usable set of events
 
     // load 100 latest from db and
     // fetch since latest in db until now
     const since = await this.loadFromDb(100);
-    await this.fetchObjects(since);
+    await this.fetchAllObjects(since);
   }
 
-  private async fetchAllObjects() {
-    console.log(Date.now(), "start full sync");
+  private async loadPreview() {
+    // fetch the latest stuff from relays
+    await this.fetchAllObjects();
+  }
+
+  private async fetchAllObjects(since: number = 0) {
+    console.log(Date.now(), "start sync, max", this.maxObjects);
     let until = 0;
     do {
       const was_count = this.posts.length;
-      await this.fetchObjects(0, until);
+      await this.fetchObjects(since, until);
 
       if (this.posts.length === was_count) {
-        console.log("stop full sync, end");
+        console.log("stop sync, end");
         break;
       }
 
@@ -180,34 +185,30 @@ export class NostrStore extends RamStore {
         .map((p) => p.event.created_at)
         .reduce((last, current) => Math.min(last, current), until);
       if (newUntil === until) {
-        console.log("stop full sync, same cursor", newUntil);
+        console.log("stop sync, same cursor", newUntil);
         break;
       }
       until = newUntil;
     } while (this.posts.length < this.maxObjects);
 
-    console.log(Date.now(), "done full sync, posts", this.posts.length);
+    console.log(Date.now(), "done sync, posts", this.posts.length);
   }
 
-  private async loadAll() {
-    let since = await this.loadFromDb(this.maxObjects);
+  private async loadSw() {
+    const since = await this.loadFromDb(this.maxObjects);
+    const now = Math.floor(Date.now() / 1000);
 
     const sync = await dbi.getSync();
     const synced = sync && sync.site_id === this.settings.event.id;
 
-    if (!synced) {
-      // forward sync will be done from 'now'
-      since = Math.floor(Date.now() / 1000);
+    // sync from since
+    await this.fetchAllObjects(synced ? since : 0);
 
-      // full sync
-      await this.fetchAllObjects();
-
-      // mark as synced
-      await dbi.setSync(this.settings.event.id!);
-    }
+    // mark as synced
+    if (!synced) await dbi.setSync(this.settings.event.id!);
 
     // sync forward from 'since'
-    await this.fetchObjects(since, 0, true);
+    await this.fetchObjects(now, 0, true);
   }
 
   private async loadSsr() {
@@ -221,9 +222,11 @@ export class NostrStore extends RamStore {
     this.recommendations = recommendations;
 
     if (this.mode === "iife") {
-      await this.loadMinimal();
+      await this.loadIife();
+    } else if (this.mode === "preview") {
+      await this.loadPreview();
     } else if (this.mode === "sw") {
-      await this.loadAll();
+      await this.loadSw();
     } else if (this.mode === "ssr") {
       await this.loadSsr();
     }
@@ -237,6 +240,8 @@ export class NostrStore extends RamStore {
     console.log("store authors", this.authors);
     console.log("store profiles", this.profiles);
     console.log("store recommendations", this.recommendations);
+
+    console.warn("loaded posts", this.posts.length);
   }
 
   public async prepare(engine: ThemeEngine) {
@@ -253,7 +258,7 @@ export class NostrStore extends RamStore {
 
   private async storeEvents(events: NDKEvent[]) {
     // no caching for ssr for now
-    if (this.mode === "ssr") return;
+    if (this.mode === "ssr" || this.mode === "preview") return;
 
     const promise = dbi.addEvents(events);
 
@@ -466,7 +471,10 @@ export class NostrStore extends RamStore {
   }
 
   private async fetchProfiles(pubkeys: string[]) {
-    const cachedEvents = await dbi.listKindEvents(KIND_PROFILE, 100);
+    const useCache = this.mode === "iife" || this.mode === "sw";
+    const cachedEvents = useCache
+      ? await dbi.listKindEvents(KIND_PROFILE, 100)
+      : [];
     const profiles = cachedEvents
       .filter((e) => pubkeys.includes(e.pubkey))
       .map((e) => new NDKEvent(this.ndk, e));
@@ -504,12 +512,22 @@ export class NostrStore extends RamStore {
   }
 
   private createTagFilters(since?: number, until?: number) {
+    // const limit =
+    //   this.mode !== "iife" && this.mode !== "preview"
+    //     ? Math.min(this.maxObjects, 1000)
+    //     : 50;
+
+    // download in batches of 2x of max objects (some of them
+    // we'll drop, i.e. replies), max batch is 300 to make
+    // sure we fit into the default timeout per batch
+    const limit = Math.min(this.maxObjects * 2, 300);
+
     const filters: NDKFilter[] = [];
     const add = (kind: number, tag?: { tag: string; value: string }) => {
       const f: NDKFilter = {
         authors: this.settings.contributor_pubkeys,
         kinds: [kind],
-        limit: this.mode !== "iife" ? Math.min(this.maxObjects, 1000) : 50,
+        limit,
       };
       if (tag) {
         // @ts-ignore
@@ -578,41 +596,54 @@ export class NostrStore extends RamStore {
     const queue = new PromiseQueue();
 
     return new Promise<void>((ok) => {
-      sub.on(
-        "event",
-        queue.appender(async (e) => {
-          if (eose && subscribe) {
-            console.log("new event", e);
-            if (this.matchObject(e)) {
-              await this.storeEvents([e]);
-              await this.parseEvents([e]);
+      const timeoutMs =
+        subscribe || // it's forward looking, should be fast
+        this.mode === "iife" || // asap
+        (this.mode === "ssr" && this.maxObjects <= 500) // index.html
+          ? 3000
+          : 10000;
 
-              // ensure we load profiles
-              await this.fetchAuthors();
+      const timeout = setTimeout(() => {
+        console.warn("fetchByFilter timeout");
+        onEose();
+      }, timeoutMs);
 
-              //
-              await this.postProcess();
-            }
-          } else {
-            if (this.matchObject(e)) events.push(e);
+      const onEose = async () => {
+        if (timeout) clearTimeout(timeout);
+        if (eose) return; // timeout
+        eose = true;
+        if (!subscribe) sub.stop();
+
+        console.log("events", { events, filters, relays });
+        await this.storeEvents(events);
+        await this.parseEvents(events);
+        ok();
+
+        // consumed
+        events.length = 0;
+      };
+
+      const onEvent = async (e: NDKEvent) => {
+        if (eose && subscribe) {
+          console.log("new event", e);
+          if (this.matchObject(e)) {
+            await this.storeEvents([e]);
+            await this.parseEvents([e]);
+
+            // ensure we load profiles
+            await this.fetchAuthors();
+
+            //
+            await this.postProcess();
           }
-        })
-      );
+        } else {
+          if (this.matchObject(e)) events.push(e);
+        }
+      };
 
-      sub.on(
-        "eose",
-        queue.appender(async () => {
-          eose = true;
-          if (!subscribe) sub.stop();
+      sub.on("event", queue.appender(onEvent));
 
-          console.log("events", { events, filters, relays });
-          await this.storeEvents(events);
-          await this.parseEvents(events);
-          ok();
-
-          events.length = 0;
-        })
-      );
+      sub.on("eose", queue.appender(onEose));
 
       sub.start();
     });
