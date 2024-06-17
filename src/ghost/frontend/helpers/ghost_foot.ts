@@ -11,6 +11,7 @@ export default function ghost_foot(options: any) {
 
   // eslint-disable-line camelcase
   const foot: string[] = [];
+  const site = options.data.site;
 
   // const globalCodeinjection = settingsCache.get("codeinjection_foot");
   // const postCodeinjection =
@@ -33,6 +34,17 @@ export default function ghost_foot(options: any) {
   // if (!_.isEmpty(tagCodeinjection)) {
   //   foot.push(tagCodeinjection);
   // }
+
+  // venobox galleries
+  foot.push(`
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css" type="text/css" media="screen" />
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js"></script>
+  <script>new VenoBox({ 
+    selector: ".vbx-image", 
+    spinColor: "${site.accent_color}",
+    toolsBackground: "${site.accent_color}",
+  })</script>
+  `);
 
   foot.push(getPwaCode(renderOptions));
 

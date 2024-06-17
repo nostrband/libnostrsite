@@ -14,6 +14,7 @@ import { DateTime } from "luxon";
 import downsize from "downsize-cjs";
 import { SiteAddr } from "../types/site-addr";
 import { slugify } from "../../ghost/helpers/slugify";
+import { load as loadHtml } from "cheerio";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
@@ -271,12 +272,13 @@ export class NostrParser {
       event: e.rawEvent(),
       show_title_and_feature_image: true,
     };
+    this.embedMedia(post);
 
     post.images = this.parseImages(post);
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
-    // FIXME config
+    // FIXME config?
     post.og_description = post.links.find((u) => this.isVideoUrl(u)) || null;
 
     return post;
@@ -338,10 +340,14 @@ export class NostrParser {
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
+    const includeFeatureImageInPost = this.getConf("include_feature_image") === "true";
+
     // only one image url at the start? cut it, we're
-    // using it in feature_image
+    // using it in feature_image, unless we're told to include it
+    // for themes that don't (fully) show featured image 
     let content = e.content;
     if (
+      !includeFeatureImageInPost &&
       post.images.length === 1 &&
       (content.trim().startsWith(post.images[0]) ||
         content.trim().endsWith(post.images[0]))
@@ -352,6 +358,7 @@ export class NostrParser {
     // now format content w/o the feature_image
     post.markdown = content;
     post.html = await marked.parse(content);
+    this.embedMedia(post);
 
     // now cut all links to create a title and excerpt
     let textContent = content;
@@ -372,10 +379,39 @@ export class NostrParser {
     return post;
   }
 
-  // private getConf(name: string): string | undefined {
-  //   if (!this.config) return "";
-  //   return this.config.get(name);
-  // }
+  private embedMedia(post: Post) {
+    // parse formatted html
+    const dom = loadHtml(post.html!);
+
+    // replace media links
+    for (const url of post.links) {
+      let code = "";
+      if (this.isVideoUrl(url)) {
+        code = `<video controls src="${url}"></video>`;
+      } else if (this.isAudioUrl(url)) {
+        code = `<audio controls src="${url}"></audio>`;
+      } else if (this.isImageUrl(url)) {
+        code = `<a href="${url}" class="vbx-image" target="_blank"><img class="venobox" src="${url}" /></a>`;
+      }
+      if (!code) continue;
+
+      dom(`a[href="${url}"]`).replaceWith(code);
+
+      // post.html = post
+      //   .html!.replace(` ${url}`, ` ${code}`)
+      //   .replace(`\n${url}`, `\n${code}`)
+      //   .replace(`>${url}`, `>${code}`);
+      
+    }
+
+    // done
+    post.html = dom.html();
+  }
+
+  private getConf(name: string): string | undefined {
+    if (!this.config) return "";
+    return this.config.get(name);
+  }
 
   public parseHashtags(e: NDKEvent): string[] {
     return tags(e, "t").map((tv) => tv[1]);

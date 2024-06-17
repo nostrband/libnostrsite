@@ -299,6 +299,19 @@ export class NostrStore extends RamStore {
     }
   }
 
+  private removePost(post: Post) {
+    for (const t of post.tags) {
+      t.postIds = t.postIds.filter(id => id !== post.id);
+    }
+    for (const a of post.authors) {
+      a.count.posts--;
+    }
+    this.posts.splice(
+      this.posts.findIndex((p) => p.id === post.id),
+      1
+    );
+  }
+
   private async parseEvents(events: NDKEvent[]) {
     for (const e of events) {
       let post: Post | undefined;
@@ -313,7 +326,14 @@ export class NostrStore extends RamStore {
           console.warn("invalid kind", e);
       }
       if (!post) continue;
-      if (this.posts.find((p) => p.id === post!.id)) continue;
+
+      // replaceable events
+      const existing = this.posts.find((p) => p.id === post!.id);
+      if (existing && existing.event.created_at > post.event.created_at)
+        continue;
+
+      // drop existing post, we're replacing it with a new version
+      if (existing) this.removePost(existing);
 
       // make sure it has unique slug
       if (this.posts.find((p) => p.slug === post!.slug)) post.slug = post.id;

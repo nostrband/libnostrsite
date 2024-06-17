@@ -31,6 +31,8 @@ import raw from "../../ghost/frontend/helpers/raw";
 import title from "../../ghost/frontend/helpers/title";
 import has from "../../ghost/frontend/helpers/has";
 import page_url from "../../ghost/frontend/helpers/page_url";
+import t from "../../ghost/frontend/helpers/t";
+import encode from "../../ghost/frontend/helpers/encode";
 
 function registerAsyncHelper(hbs: any, name: string, fn: any) {
   hbs.registerAsyncHelper(
@@ -111,4 +113,6 @@ export const initHelpers = (hbs: ThemeEngine) => {
   registerHelper(hbs, "title", title);
   registerHelper(hbs, "has", has);
   registerHelper(hbs, "page_url", page_url);
+  registerHelper(hbs, "t", t);
+  registerHelper(hbs, "encode", encode);
 };
