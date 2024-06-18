@@ -24,6 +24,7 @@ import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import { fetchOutboxRelays, isBlossomUrl } from "./utils";
 import { dbi } from "./store/db";
 import { Store } from ".";
+import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -31,6 +32,7 @@ export class NostrSiteRenderer implements Renderer {
   public theme?: Theme;
   private options?: RenderOptions;
   private ndk?: NDK;
+  private assetFetcher = new DefaultAssetFetcher();
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
   private store?: Store;
@@ -302,7 +304,7 @@ export class NostrSiteRenderer implements Renderer {
 
     console.log("settings", settings);
 
-    this.parser.setConfig(settings.config);
+    this.parser.setSite(settings);
 
     // FIXME remove this crap
     this.config = loader.loadNconf();
@@ -333,7 +335,14 @@ export class NostrSiteRenderer implements Renderer {
     ]);
 
     // now we have everything needed to init the engine
-    await this.engine.init(settings, [this.theme!], this.config);
+    await this.engine.init(
+      settings,
+      [this.theme!],
+      this.config,
+      undefined,
+      undefined,
+      this.assetFetcher
+    );
 
     // after data is loaded and engine is initialized,
     // prepare using the engine (assign urls etc)
@@ -377,7 +386,14 @@ export class NostrSiteRenderer implements Renderer {
     this.engine = new ThemeEngine(this.store!, this.options!);
 
     // now we have everything needed to init the engine
-    await this.engine.init(this.settings!, [this.theme!], this.config);
+    await this.engine.init(
+      this.settings!,
+      [this.theme!],
+      this.config,
+      undefined,
+      undefined,
+      this.assetFetcher
+    );
 
     // after data is loaded and engine is initialized,
     // prepare using the engine (assign urls etc)

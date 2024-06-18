@@ -40,9 +40,9 @@ export default function ghost_foot(options: any) {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css" type="text/css" media="screen" />
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js"></script>
   <script>new VenoBox({ 
-    selector: ".vbx-image", 
+    selector: ".vbx-media", 
     spinColor: "${site.accent_color}",
-    toolsBackground: "${site.accent_color}",
+    overlayColor: "${site.accent_color}",
   })</script>
   `);
 

@@ -22,14 +22,16 @@ function fromUNIX(ts: number | undefined) {
 
 export class NostrParser {
   readonly origin?: string;
-  private config: Map<string, string> | undefined;
+  private site?: Site;
+  private config?: Map<string, string>;
 
   constructor(origin?: string) {
     this.origin = origin;
   }
 
-  public setConfig(config: Map<string, string>) {
-    this.config = config;
+  public setSite(site: Site) {
+    this.site = site;
+    this.config = site.config;
   }
 
   public getId(e: NDKEvent) {
@@ -340,11 +342,12 @@ export class NostrParser {
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
-    const includeFeatureImageInPost = this.getConf("include_feature_image") === "true";
+    const includeFeatureImageInPost =
+      this.getConf("include_feature_image") === "true";
 
     // only one image url at the start? cut it, we're
     // using it in feature_image, unless we're told to include it
-    // for themes that don't (fully) show featured image 
+    // for themes that don't (fully) show featured image
     let content = e.content;
     if (
       !includeFeatureImageInPost &&
@@ -387,11 +390,27 @@ export class NostrParser {
     for (const url of post.links) {
       let code = "";
       if (this.isVideoUrl(url)) {
-        code = `<video controls src="${url}"></video>`;
+        code = `
+<a class="vbx-media" style="text-decoration: none" data-autoplay="true" data-vbtype="video" href="${url}">
+<svg style="display: inline" fill="${this.site?.accent_color || "#000000"}" version="1.1" 
+   xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+	 width="16px" height="16px" viewBox="0 0 562.746 562.746"
+	 xml:space="preserve">
+<g>
+	<g>
+		<path d="M281.37,0C125.977,0,0.003,125.974,0.003,281.373c0,155.399,125.974,281.373,281.373,281.373
+			c155.393,0,281.367-125.974,281.367-281.373C562.743,125.974,436.769,0,281.37,0z M484.212,305.425L192.287,471.986
+			c-23.28,13.287-42.154,2.326-42.154-24.479V115.239c0-26.805,18.874-37.766,42.154-24.479l291.925,166.562
+			C507.491,270.602,507.491,292.145,484.212,305.425z"/>
+	</g>
+</g>
+</svg> Play video
+</a>
+`;
       } else if (this.isAudioUrl(url)) {
         code = `<audio controls src="${url}"></audio>`;
       } else if (this.isImageUrl(url)) {
-        code = `<a href="${url}" class="vbx-image" target="_blank"><img class="venobox" src="${url}" /></a>`;
+        code = `<a href="${url}" class="vbx-media" target="_blank"><img class="venobox" src="${url}" /></a>`;
       }
       if (!code) continue;
 
@@ -401,7 +420,6 @@ export class NostrParser {
       //   .html!.replace(` ${url}`, ` ${code}`)
       //   .replace(`\n${url}`, `\n${code}`)
       //   .replace(`>${url}`, `>${code}`);
-      
     }
 
     // done
