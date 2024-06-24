@@ -36,15 +36,26 @@ export default function ghost_foot(options: any) {
   // }
 
   // venobox galleries
-  foot.push(`
+  if (site.config.get("no_default_plugins") !== "true") {
+    foot.push(`
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css" type="text/css" media="screen" />
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js"></script>
-  <script>new VenoBox({ 
-    selector: ".vbx-media", 
-    spinColor: "${site.accent_color}",
-    overlayColor: "${site.accent_color}",
-  })</script>
+  <script>
+    const script = document.createElement('script');
+    script.async = true;
+    script.type = "text/javascript";
+    script.src = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
+    script.onload = () => {
+      new VenoBox({ 
+        selector: ".vbx-media", 
+        spinColor: "${site.accent_color}",
+        overlayColor: "${site.accent_color}",
+      })
+    };
+    document.body.appendChild(script);
+  </script>
   `);
+//  <script type="text/javascript" async src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js" onload=""></script>
+  }
 
   foot.push(getPwaCode(renderOptions));
 
@@ -92,9 +103,9 @@ export default function ghost_foot(options: any) {
   <script>
     const modal = document.getElementById("__nostr_site_loading_modal");
     // give it some time to render
-    setTimeout(() => modal.style.display = 'none', 10);
+    setTimeout(() => modal.style.display = 'none', 30);
   </script>
 `);
 
   return new SafeString(foot.join(" ").trim());
-};
+}

@@ -13,5 +13,5 @@ export const DEFAULT_MAX_LIMIT = 20;
 export const OUTBOX_RELAYS = [
   "wss://purplepag.es",
   "wss://user.kindpag.es",
-  "wss://relay.nos.social",
+//  "wss://relay.nos.social", - misbehaves
 ];

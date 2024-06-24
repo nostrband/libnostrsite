@@ -43,6 +43,7 @@ export class UrlService {
   }
 
   public getUrlByResourceId(id: string, options: any = {}) {
+    console.log("getUrlByResourceId resource", id);
     const slug = this.store.getUrl(id);
     if (slug) {
       if (options.absolute) {

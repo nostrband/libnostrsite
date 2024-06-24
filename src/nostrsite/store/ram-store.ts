@@ -44,6 +44,7 @@ export class RamStore implements Store {
   }
 
   public getUrl(id: string, type?: string) {
+    console.log("geturl", id, type, this.getSync(id, type));
     return this.getSync(id, type)?.url;
   }
 

@@ -16,7 +16,7 @@ export function parseAddr(naddr: string): SiteAddr {
   }
 
   return {
-    name: data.identifier,
+    identifier: data.identifier,
     pubkey: data.pubkey,
     relays: data.relays || [],
   };
@@ -85,7 +85,7 @@ export async function fetchNostrSite(addr: SiteAddr) {
       // @ts-ignore
       kinds: [KIND_SITE],
       authors: [addr.pubkey],
-      "#d": [addr.name],
+      "#d": [addr.identifier],
     },
     { groupable: false }
   );
@@ -133,10 +133,7 @@ export async function prepareSite(
   const name = meta.name || meta.display_name;
   console.log("name", name.toLowerCase());
 
-  let slug = slugify(name).trim();
-  if (!slug)
-    slug = slugify(meta.nip05.split("@")[0] || meta.lud16.split("@")[0]);
-  if (!slug) throw new Error("No name");
+  const slug = getProfileSlug(profile);
 
   const siteEvent: NostrEvent = {
     pubkey: adminPubkey,
@@ -197,6 +194,27 @@ export async function prepareSite(
   return siteEvent;
 }
 
+export async function getTopHashtags(store: Store) {
+  const list = await store.list({ type: "posts" });
+
+  const hashtagCounts = new Map<string, number>();
+  for (const p of list.posts!) {
+    p.event.tags
+      .filter((t: string[]) => t.length > 1 && t[0] === "t")
+      .map((t: string[]) => t[1])
+      .forEach((t) => {
+        let c = hashtagCounts.get(t) || 0;
+        c++;
+        hashtagCounts.set(t, c);
+      });
+  }
+  console.log("hashtag counts", hashtagCounts);
+
+  return [...hashtagCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map((t) => t[0]);
+}
+
 export async function prepareSiteByContent(
   site: NostrEvent | NDKEvent,
   store: Store
@@ -205,25 +223,7 @@ export async function prepareSiteByContent(
     .filter((t) => t.length >= 3 && t[0] === "include" && t[1] === "t")
     .map((t) => t[2]);
   if (topTags.length <= 1) {
-    const list = await store.list({ type: "posts" });
-
-    const hashtagCounts = new Map<string, number>();
-    for (const p of list.posts!) {
-      p.event.tags
-        .filter((t: string[]) => t.length > 1 && t[0] === "t")
-        .map((t: string[]) => t[1])
-        .forEach((t) => {
-          let c = hashtagCounts.get(t) || 0;
-          c++;
-          hashtagCounts.set(t, c);
-        });
-    }
-    console.log("hashtag counts", hashtagCounts);
-
-    const top = [...hashtagCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map((t) => t[0]);
-
+    const top = await getTopHashtags(store);
     if (top.length > 3) top.length = 3;
 
     console.log("top hashtags", top);
@@ -241,5 +241,20 @@ export async function prepareSiteByContent(
 
     // site hashtags for discovery
     site.tags.push(["t", t]);
+  }
+}
+
+export function getProfileSlug(profile: NostrEvent | NDKEvent) {
+  try {
+    const meta = JSON.parse(profile.content);
+    const name = meta.name || meta.display_name;
+    return (
+      slugify(name).trim() ||
+      slugify(meta.nip05.split("@")[0]).trim() ||
+      slugify(meta.lud16.split("@")[0]).trim()
+    );
+  } catch (e) {
+    console.log("Bad profile content", profile.content);
+    return "";
   }
 }

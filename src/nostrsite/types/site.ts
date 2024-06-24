@@ -14,6 +14,7 @@ export interface SiteExtension {
 
 export interface Site {
   id: string;
+  naddr: string;
   
   event: NostrEvent,
 

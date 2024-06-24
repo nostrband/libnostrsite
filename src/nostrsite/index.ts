@@ -5,3 +5,4 @@ export * from "./parser/index";
 export * from "./utils";
 export * from "./consts";
 export * from "./types";
+export * from "./modules/default-asset-fetcher";

@@ -10,6 +10,11 @@ async function executeScriptElements(doc: Document) {
   }[] = [];
 
   for (const scriptElement of Array.from(scriptElements)) {
+    if (scriptElement.text.toLowerCase().includes("document.write")) {
+      console.warn("Skip deprecated document.write scripts");
+      continue;
+    }
+
     const clonedElement = doc.createElement("script");
 
     let async = false;
@@ -31,7 +36,12 @@ async function executeScriptElements(doc: Document) {
       if (attribute.name === "src") src = attribute.value;
       clonedElement.setAttribute(attribute.name, attribute.value);
     }
-    console.log(Date.now(), "script", { async, defer, type, src });
+    console.log(Date.now(), "script", {
+      async,
+      defer,
+      type,
+      src,
+    });
 
     clonedElement.text = scriptElement.text;
 
@@ -43,11 +53,17 @@ async function executeScriptElements(doc: Document) {
     if (defer || type === "module") {
       deferScripts.push({ scriptElement, clonedElement, src });
     } else {
-      scriptElement.parentNode!.replaceChild(clonedElement, scriptElement);
       // inline script execute immediately,
       // async can execute at any time, no need to wait
+      let promise = undefined;
       if (src && !async)
-        await new Promise((ok) => clonedElement.addEventListener("load", ok));
+        promise = new Promise((ok) =>
+          clonedElement.addEventListener("load", ok)
+        );
+
+      scriptElement.parentNode!.replaceChild(clonedElement, scriptElement);
+      if (promise) await promise;
+
       console.log(Date.now(), "loaded", src);
     }
   }
@@ -84,16 +100,25 @@ async function waitStyles(doc: Document) {
 }
 
 export async function setHtml(html: string, doc?: Document, win?: Window) {
+  // maybe iframe, not root doc
+  doc = doc || document;
+  win = win || window;
+
+  // we need to open it to imitate creating the document from scratch,
+  // so that calls to 'document.write' inlined into the html won't
+  // result in implicit 'doc.open' and the reset of the page
+  doc.open();
+
   // NOTE: document.write is sync method that produces lots of warning due
   // to browser fetching sync scripts within the 'write', browser
   // may also block those scripts, and this also causes document
-  // readyState to always be 'loading', and these are also deprecated...
-  // document.open();
-  // document.write(html);
-  // document.close();
+  // readyState to always be 'loading', and it's also deprecated...
+  // doc.write(html);
+  // instead, we use innerHTML to set the html and then execute
+  // scripts manually
 
-  doc = doc || document;
-  win = win || window;
+  // create documentElement, which is cleared by doc.open
+  doc.write("<html></html>");
 
   // so we're using innerHTML to replace the whole document,
   // but doesn't run the <script>,
@@ -103,6 +128,9 @@ export async function setHtml(html: string, doc?: Document, win?: Window) {
   // Element.innerHTML or Element.outerHTML, they do not execute at all."
   console.log(Date.now(), "html set", html.length);
   doc.documentElement.innerHTML = html;
+
+  // done
+  doc.close();
 
   // wait for styles and scripts
   await Promise.all([waitStyles(doc), executeScriptElements(doc)]);

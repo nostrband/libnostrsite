@@ -369,7 +369,7 @@ export class ThemeEngine {
     // OTOH, object.url is filled in parser, so it's already a mess...
     const limit =
       ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
-    for (let i = 2; i <= posts!.length / limit; i++)
+    for (let i = 1; i <= posts!.length / limit; i++)
       put(`/page/${i}`);
 
     for (const p of posts!) {

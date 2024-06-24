@@ -1,6 +1,6 @@
 import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { Site } from "../types/site";
-import { tags, tv } from "./utils";
+import { eventId, tags, tv } from "./utils";
 import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { marked } from "marked";
@@ -34,22 +34,6 @@ export class NostrParser {
     this.config = site.config;
   }
 
-  public getId(e: NDKEvent) {
-    if (e.kind === undefined) return "";
-    const isMeta = e.kind === 0 || e.kind === 3;
-    const isReplaceable = e.kind >= 10000 && e.kind < 20000;
-    const isPRE = e.kind >= 30000 && e.kind < 40000;
-    if (isMeta || isReplaceable || isPRE) {
-      return nip19.naddrEncode({
-        identifier: tv(e, "d") || "",
-        kind: e.kind,
-        pubkey: e.pubkey,
-      });
-    } else {
-      return nip19.noteEncode(e.id);
-    }
-  }
-
   public getAuthorId(e: NostrEvent) {
     return nip19.npubEncode(e.pubkey);
   }
@@ -57,8 +41,8 @@ export class NostrParser {
   public parseSite(addr: SiteAddr, event: NDKEvent): Site {
     if (!event) throw new Error("Site not found");
 
-    const id = nip19.naddrEncode({
-      identifier: addr.name,
+    const naddr = nip19.naddrEncode({
+      identifier: addr.identifier,
       kind: KIND_SITE,
       pubkey: addr.pubkey,
       relays: addr.relays,
@@ -68,10 +52,11 @@ export class NostrParser {
     const url = ref ? new URL(ref) : null;
 
     const settings: Site = {
-      id,
+      id: eventId(event),
+      naddr,
       event: event.rawEvent(),
 
-      name: tv(event, "d") || "",
+      name: tv(event, "name") || "",
       admin_pubkey: event.pubkey,
       admin_relays: addr.relays,
 
@@ -168,7 +153,7 @@ export class NostrParser {
 
   public async parseTheme(e: NDKEvent) {
     if (e.kind !== KIND_PACKAGE) throw new Error("Bad kind: " + e.kind);
-    const id = this.getId(e);
+    const id = eventId(e);
     const theme: Theme = {
       id,
 
@@ -226,7 +211,7 @@ export class NostrParser {
   public async parseLongNote(e: NDKEvent) {
     if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
 
-    const id = this.getId(e);
+    const id = eventId(e);
     const html = await marked.parse(e.content);
     const post: Post = {
       id,
@@ -289,7 +274,7 @@ export class NostrParser {
   public async parseNote(e: NDKEvent) {
     if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
 
-    const id = this.getId(e);
+    const id = eventId(e);
     const post: Post = {
       id,
       slug: slugify(tv(e, "slug") || id),
@@ -342,7 +327,7 @@ export class NostrParser {
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
-    const includeFeatureImageInPost =
+    const includeFeatureImageInPost = 
       this.getConf("include_feature_image") === "true";
 
     // only one image url at the start? cut it, we're
@@ -368,10 +353,11 @@ export class NostrParser {
     for (const l of post.links) textContent = textContent.replace(l, "");
     for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
     post.excerpt = downsize(textContent, { words: 50 });
-    post.title = downsize(textContent.trim().split("\n")[0], { words: 10 });
+    post.title = downsize(textContent.trim().split("\n")[0], { words: 6 });
+    if (post.title !== content.trim()) post.title += "…";
 
-    // short content (title === content) => empty title
-    if (content.trim() === post.title?.trim()) post.title = null;
+    // short content (title === content) => empty title?
+    // if (content.trim() === post.title?.trim()) post.title = null;
 
     // podcasts
     // if (this.getConf("podcast_media_in_og_description") === "true") {

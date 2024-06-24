@@ -38,6 +38,7 @@ export class NostrStore extends RamStore {
   private filters: NDKFilter[];
   private maxObjects: number = MAX_OBJECTS;
   private subs: NDKSubscription[] = [];
+  private engine?: ThemeEngine;
 
   constructor(
     mode: RenderMode = "iife",
@@ -244,15 +245,19 @@ export class NostrStore extends RamStore {
     console.warn("loaded posts", this.posts.length);
   }
 
-  public async prepare(engine: ThemeEngine) {
+  public async prepare(engine?: ThemeEngine) {
+    if (engine) this.engine = engine;
+    engine = this.engine;
+    if (!engine) throw new Error("No engine");
+
     this.posts.forEach((post) => {
-      post.url = engine.getMetaDataUrl(post);
+      post.url = engine!.getMetaDataUrl(post);
     });
     this.tags.forEach((tag) => {
-      tag.url = engine.getMetaDataUrl(tag);
+      tag.url = engine!.getMetaDataUrl(tag);
     });
     this.authors.forEach((author) => {
-      author.url = engine.getMetaDataUrl(author);
+      author.url = engine!.getMetaDataUrl(author);
     });
   }
 
@@ -488,6 +493,8 @@ export class NostrStore extends RamStore {
     if (!event || !this.matchObject(event.rawEvent())) return undefined;
 
     await this.parseEvents([event]);
+
+    await this.prepare();
   }
 
   private async fetchProfiles(pubkeys: string[]) {

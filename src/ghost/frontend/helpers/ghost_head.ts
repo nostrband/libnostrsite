@@ -317,7 +317,7 @@ export default async function ghost_head(options: any) {
     }
 
     // site id for pwa code to function and for crawlers to see
-    head.push(`<meta property="nostr:site" content="${site.id}" >`);
+    head.push(`<meta property="nostr:site" content="${site.naddr}" >`);
 
     // manifest
     head.push(
@@ -336,6 +336,11 @@ export default async function ghost_head(options: any) {
     if (site.config.get("no_default_plugins") === "true") {
       console.log("default plugins turned off");
     } else {
+
+      head.push(`
+    <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css" />
+      `);
+
       head.push(`
     <script type="text/javascript" async src="https://unpkg.com/zapthreads/dist/zapthreads.iife.js"></script>
   `);
@@ -343,6 +348,7 @@ export default async function ghost_head(options: any) {
       head.push(`
     <script async src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
       data-perms="sign_event:1"
+      data-no-banner="true"
     ></script>
     <script>
       document.addEventListener("nlAuth", async (e) => {

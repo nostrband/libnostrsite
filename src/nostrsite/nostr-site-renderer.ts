@@ -23,7 +23,7 @@ import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import { fetchOutboxRelays, isBlossomUrl } from "./utils";
 import { dbi } from "./store/db";
-import { Store } from ".";
+import { AssetFetcher, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
 
 export class NostrSiteRenderer implements Renderer {
@@ -32,18 +32,25 @@ export class NostrSiteRenderer implements Renderer {
   public theme?: Theme;
   private options?: RenderOptions;
   private ndk?: NDK;
-  private assetFetcher = new DefaultAssetFetcher();
+  private assetFetcher: AssetFetcher;
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
   private store?: Store;
   private parser?: NostrParser;
   private config?: any;
   private hasStarted: boolean = false;
+  private preloaded = new Set<string>();
 
-  constructor() {
+  constructor(
+    opt: {
+      assetFetcher?: AssetFetcher;
+    } = {}
+  ) {
+    this.assetFetcher = opt.assetFetcher || new DefaultAssetFetcher();
+
     // empty at the start
     this.addr = {
-      name: "",
+      identifier: "",
       pubkey: "",
       relays: [],
     };
@@ -92,7 +99,7 @@ export class NostrSiteRenderer implements Renderer {
 
       // find cached site
       const cachedSite = sites.find(
-        (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.name
+        (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.identifier
       );
       console.log("cache site", cachedSite, sites);
 
@@ -114,7 +121,7 @@ export class NostrSiteRenderer implements Renderer {
           // @ts-ignore
           kinds: [KIND_SITE],
           authors: [this.addr.pubkey],
-          "#d": [this.addr.name],
+          "#d": [this.addr.identifier],
         },
         { groupable: false },
         NDKRelaySet.fromRelayUrls(relayUrls, this.ndk!)
@@ -248,6 +255,9 @@ export class NostrSiteRenderer implements Renderer {
       document.head.appendChild(link);
     };
     for (const e of theme.entries) {
+      if (this.preloaded.has(e.url)) continue;
+      this.preloaded.add(e.url);
+
       if (e.url === JQUERY) {
         // skip, we're prefetching it in the ghost_head with
         // an integrity check
@@ -310,7 +320,7 @@ export class NostrSiteRenderer implements Renderer {
     this.config = loader.loadNconf();
     this.config.url = new URL(
       settings.url || "/",
-      origin || settings.origin
+      origin || settings.origin || `http://localhost/`
     ).href;
 
     // event store
@@ -420,7 +430,7 @@ export class NostrSiteRenderer implements Renderer {
       // @ts-ignore
       kinds: [KIND_SITE],
       authors: [this.addr.pubkey],
-      "#d": [this.addr.name],
+      "#d": [this.addr.identifier],
       since: this.settings!.event.created_at,
     };
 

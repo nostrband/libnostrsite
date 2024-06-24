@@ -9,26 +9,32 @@ export class DefaultAssetFetcher implements AssetFetcher {
   private themes: Theme[] = [];
   private cache = new Map<string, string>();
 
+  constructor() {
+    console.log("new asset fetcher");
+  }
+
   public addTheme(theme: Theme) {
-    this.themes.push(theme);
+    // already there
+    if (this.themes.find((t) => t.id === theme.id)) return;
+    this.themes.unshift(theme);
   }
 
   public async load() {
-    if (!this.themes.length) return;
-
-    // prefetch partials in parallel
+    // prefetch partials
     const promises: Promise<void>[] = [];
-    const theme = this.themes[0];
-    for (const e of theme.entries) {
-      if (!e.path.endsWith(".hbs")) continue;
-      promises.push(
-        fetch(e.url)
-          .then((d) => d.text())
-          .then((d) => {
-            console.log("prefetched", e.url);
-            this.cache.set(e.url, d);
-          })
-      );
+    for (const theme of this.themes) {
+      for (const e of theme.entries) {
+        if (!e.path.endsWith(".hbs")) continue;
+        if (this.cache.get(e.url)) continue;
+        promises.push(
+          fetch(e.url)
+            .then((d) => d.text())
+            .then((d) => {
+              console.log("prefetched", e.url);
+              this.cache.set(e.url, d);
+            })
+        );
+      }
     }
   }
 
@@ -58,7 +64,7 @@ export class DefaultAssetFetcher implements AssetFetcher {
 
       // return as is if it has extension
       // if (!ext || name.includes(".")) {
-        return entry.url;
+      return entry.url;
       // }
 
       // return `${entry.url}.${ext}`;
@@ -80,7 +86,14 @@ export class DefaultAssetFetcher implements AssetFetcher {
       console.debug("fetch cached", url);
       return c;
     }
-    return fetch(url).then((d) => d.text());
+
+    // fetch then put to cache then return
+    return fetch(url)
+      .then((d) => d.text())
+      .then((r) => {
+        this.cache.set(url, r);
+        return r;
+      });
   }
 
   public async fetch(file: string) {
