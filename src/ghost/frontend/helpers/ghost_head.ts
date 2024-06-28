@@ -231,13 +231,20 @@ export default async function ghost_head(options: any) {
   console.log("ghost_head", options);
   const head = [];
 
+  head.push(`
+  <!-- 
+  ***********************
+   Powered by npub.pro 
+  ***********************
+  -->
+  `);
+
   const site = options.data.site;
   const root = options.data.root;
   const object = root.object;
   const context = root.context;
   // const safeVersion = dataRoot._locals?.safeVersion;
 
-  //   const globalCodeinjection = settingsCache.get("codeinjection_head");
   //   const useStructuredData = !config.isPrivacyDisabled("useStructuredData");
   //   const referrerPolicy = config.get("referrerPolicy")
   //     ? config.get("referrerPolicy")
@@ -396,6 +403,10 @@ export default async function ghost_head(options: any) {
           escapeExpression(paginationUrl(pagination?.next)) +
           '">'
       );
+    }
+
+    if (site.codeinjection_head) {
+      head.push(site.codeinjection_head);
     }
 
     if (context) {

@@ -34,7 +34,7 @@ export class NostrParser {
     this.config = site.config;
   }
 
-  public getAuthorId(e: NostrEvent) {
+  public getAuthorId(e: NDKEvent | NostrEvent) {
     return nip19.npubEncode(e.pubkey);
   }
 
@@ -57,7 +57,7 @@ export class NostrParser {
       event: event.rawEvent(),
 
       name: tv(event, "name") || "",
-      admin_pubkey: event.pubkey,
+      admin_pubkey: tv(event, "u") || event.pubkey,
       admin_relays: addr.relays,
 
       url: url ? url.pathname : "/",
@@ -65,6 +65,7 @@ export class NostrParser {
 
       contributor_pubkeys: tags(event, "p").map((t) => t[1]),
       contributor_relays: [],
+      contributor_inbox_relays: [],
 
       include_tags: tags(event, "include", 3).map((t) => ({
         tag: t[1],
@@ -75,9 +76,9 @@ export class NostrParser {
       include_kinds: tags(event, "kind").map((t) => t[1]),
       include_relays: tags(event, "relay").map((t) => t[1]),
 
-      engine: tv(event, "x") || undefined,
-      themes: tags(event, "y").map((t) => t[1]),
-      plugins: tags(event, "z").map((t) => t[1]),
+      engine: tv(event, "z") || undefined,
+      // themes: tags(event, "y").map((t) => t[1]),
+      // plugins: tags(event, "z").map((t) => t[1]),
 
       title: tv(event, "title"),
       timezone: "UTC",
@@ -122,10 +123,12 @@ export class NostrParser {
     if (
       !settings.contributor_pubkeys.length ||
       (settings.contributor_pubkeys.length === 1 &&
-        settings.contributor_pubkeys[0] === addr.pubkey)
+        settings.contributor_pubkeys[0] === settings.admin_pubkey)
     ) {
-      settings.contributor_pubkeys = [addr.pubkey];
-      settings.contributor_relays = addr.relays;
+      settings.contributor_pubkeys = [settings.admin_pubkey];
+      // addr only required to contain site relays,
+      // should fetch outbox relays of admin for this
+      // settings.contributor_relays = addr.relays;
     }
 
     if (settings.include_relays && settings.include_relays.length > 0)
@@ -141,12 +144,12 @@ export class NostrParser {
 
     if (!settings.url?.endsWith("/")) settings.url += "/";
 
-    settings.comments_enabled = this.config?.get("comments_enabled") === "true";
+    settings.comments_enabled = this.config!.get("comments_enabled") === "true";
     settings.recommendations_enabled =
-      this.config?.get("recommendations_enabled") === "true";
+      this.config!.get("recommendations_enabled") === "true";
 
-    // FIXME for testing
-    // settings.secondary_navigation = settings.navigation;
+    settings.codeinjection_head = this.config!.get("codeinjection_head") || null;
+    settings.codeinjection_foot = this.config!.get("codeinjection_foot") || null;
 
     return settings;
   }
@@ -327,7 +330,7 @@ export class NostrParser {
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
-    const includeFeatureImageInPost = 
+    const includeFeatureImageInPost =
       this.getConf("include_feature_image") === "true";
 
     // only one image url at the start? cut it, we're
@@ -378,7 +381,9 @@ export class NostrParser {
       if (this.isVideoUrl(url)) {
         code = `
 <a class="vbx-media" style="text-decoration: none" data-autoplay="true" data-vbtype="video" href="${url}">
-<svg style="display: inline" fill="${this.site?.accent_color || "#000000"}" version="1.1" 
+<svg style="display: inline" fill="${
+          this.site?.accent_color || "#000000"
+        }" version="1.1" 
    xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
 	 width="16px" height="16px" viewBox="0 0 562.746 562.746"
 	 xml:space="preserve">
@@ -423,7 +428,7 @@ export class NostrParser {
 
   public parseProfile(e: NDKEvent): Profile {
     return {
-      id: this.getAuthorId(e.rawEvent()),
+      id: this.getAuthorId(e),
       pubkey: e.pubkey,
       profile: JSON.parse(e.content),
       event: e,
@@ -486,7 +491,7 @@ export class NostrParser {
     return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
   }
 
-  private isImageUrl(u: string) {
+  public isImageUrl(u: string) {
     try {
       const url = new URL(u);
       const ext = url.pathname.split(".").pop();
@@ -505,7 +510,7 @@ export class NostrParser {
     return false;
   }
 
-  private isVideoUrl(u: string) {
+  public isVideoUrl(u: string) {
     try {
       const url = new URL(u);
       const ext = url.pathname.split(".").pop();
@@ -522,7 +527,7 @@ export class NostrParser {
     return false;
   }
 
-  private isAudioUrl(u: string) {
+  public isAudioUrl(u: string) {
     try {
       const url = new URL(u);
       const ext = url.pathname.split(".").pop();

@@ -26,6 +26,7 @@ export interface Site {
 
   contributor_pubkeys: string[],
   contributor_relays: string[],
+  contributor_inbox_relays: string[],
 
   include_tags?: { tag: string, value: string }[],
   include_all?: boolean;
@@ -34,8 +35,8 @@ export interface Site {
   include_relays?: string[];
 
   engine?: string;
-  themes?: string[];
-  plugins?: string[];
+  // themes?: string[];
+  // plugins?: string[];
 
   title: string | null,
   url: string | null
@@ -48,8 +49,8 @@ export interface Site {
   facebook: string | null,
   twitter: string | null,
   lang: string | null,
-  codeinjection_head: null,
-  codeinjection_foot: null,
+  codeinjection_head: string | null,
+  codeinjection_foot: string | null,
   navigation: SiteNavigationItem[] | null,
   secondary_navigation: SiteNavigationItem[] | null,
   meta_title: string | null,

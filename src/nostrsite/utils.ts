@@ -46,7 +46,7 @@ export class PromiseQueue {
   }
 }
 
-export async function fetchOutboxRelays(ndk: NDK, pubkeys: string[]) {
+export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
   const events = await ndk.fetchEvents(
     {
       // @ts-ignore
@@ -58,28 +58,43 @@ export async function fetchOutboxRelays(ndk: NDK, pubkeys: string[]) {
   );
 
   const writeRelays = [];
+  const readRelays = [];
 
   for (const e of events) {
     if (e.kind === KIND_RELAYS) {
-      writeRelays.push(
-        ...e.tags
+      const filter = (mark: string) => {
+        return e.tags
           .filter(
             (t) =>
               t.length >= 2 &&
               t[0] === "r" &&
-              (t.length === 2 || t[2] === "write")
+              (t.length === 2 || t[2] === mark)
           )
           .map((t) => t[1])
-      );
+      }
+      writeRelays.push(...filter("write"));
+      readRelays.push(...filter("read"));
     } else {
       try {
         const relays = JSON.parse(e.content);
         for (const url in relays) {
           if (relays[url].write) writeRelays.push(url);
+          if (relays[url].read) readRelays.push(url);
         }
       } catch {}
     }
   }
 
-  return [...new Set(writeRelays)];
+  return {
+    write: [...new Set(writeRelays)],
+    read: [...new Set(readRelays)]
+  };
+} 
+
+export async function fetchOutboxRelays(ndk: NDK, pubkeys: string[]) {
+  return (await fetchRelays(ndk, pubkeys)).write;
+} 
+
+export async function fetchInboxRelays(ndk: NDK, pubkeys: string[]) {
+  return (await fetchRelays(ndk, pubkeys)).read;
 } 

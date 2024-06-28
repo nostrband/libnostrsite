@@ -26,7 +26,7 @@ import { StoreObject } from "../types/store";
 import { matchFilter, nip19 } from "nostr-tools";
 import { slugify } from "../../ghost/helpers/slugify";
 import { DbEvent, dbi } from "./db";
-import { PromiseQueue, RenderMode, fetchOutboxRelays } from "..";
+import { PromiseQueue, RenderMode, fetchOutboxRelays, fetchRelays } from "..";
 
 const MAX_OBJECTS = 10000;
 
@@ -117,11 +117,11 @@ export class NostrStore extends RamStore {
     // already known?
     if (this.settings.contributor_relays.length > 0) return;
 
-    // fetch outbox for contributors
-    this.settings.contributor_relays = await fetchOutboxRelays(
-      this.ndk,
-      this.settings.contributor_pubkeys
-    );
+    // fetch relays for contributors
+    const { write, read } = await fetchRelays(this.ndk, this.settings.contributor_pubkeys);
+
+    this.settings.contributor_relays = write;
+    this.settings.contributor_inbox_relays = read;
 
     // limit number of relays if we care about latency
     if (this.mode === "iife" || this.mode === "preview")

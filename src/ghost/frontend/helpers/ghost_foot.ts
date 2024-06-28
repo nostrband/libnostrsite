@@ -35,6 +35,10 @@ export default function ghost_foot(options: any) {
   //   foot.push(tagCodeinjection);
   // }
 
+  if (site.codeinjection_foot) {
+    foot.push(site.codeinjection_foot);
+  }
+
   // venobox galleries
   if (site.config.get("no_default_plugins") !== "true") {
     foot.push(`
@@ -54,12 +58,14 @@ export default function ghost_foot(options: any) {
     document.body.appendChild(script);
   </script>
   `);
-//  <script type="text/javascript" async src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js" onload=""></script>
+    //  <script type="text/javascript" async src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js" onload=""></script>
   }
 
   foot.push(getPwaCode(renderOptions));
 
-  foot.push(`
+  // no need for spinner for server-side rendered pages
+  if (renderOptions.mode !== "ssr" && renderOptions.mode !== "sw") {
+    foot.push(`
   <section id="__nostr_site_loading_modal">
     <div class="loader"></div>
   </section>
@@ -103,9 +109,10 @@ export default function ghost_foot(options: any) {
   <script>
     const modal = document.getElementById("__nostr_site_loading_modal");
     // give it some time to render
-    setTimeout(() => modal.style.display = 'none', 30);
+    setTimeout(() => modal.style.display = 'none', 100);
   </script>
 `);
+  }
 
   return new SafeString(foot.join(" ").trim());
 }

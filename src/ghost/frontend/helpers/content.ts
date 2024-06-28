@@ -71,12 +71,9 @@ export default function content(options: any = {}) {
     html = new SafeString(self.html);
   }
 
-  const relays = [...site.contributor_relays];
+  const relays = [...site.contributor_inbox_relays];
   // some contributor relays to fetch their replies
-  if (relays.length > 3) relays.length = 3;
-  // common relays for comments from other people,
-  // FIXME use inbox relays of contributors!
-  relays.push("wss://relay.damus.io/", "wss://nos.lol");
+  if (relays.length > 5) relays.length = 5;
 
   html += `<zap-threads 
   anchor="${self.id}"
