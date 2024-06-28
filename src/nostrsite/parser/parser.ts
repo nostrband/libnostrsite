@@ -115,6 +115,8 @@ export class NostrParser {
         petname: x[4],
       })),
 
+      google_site_verification: "",
+
       config: new Map(),
       custom: new Map(),
     };
@@ -153,6 +155,9 @@ export class NostrParser {
       settings.config.get("codeinjection_head") || null;
     settings.codeinjection_foot =
       settings.config.get("codeinjection_foot") || null;
+
+    settings.google_site_verification = 
+      settings.config.get("google_site_verification") || "";
 
     return settings;
   }

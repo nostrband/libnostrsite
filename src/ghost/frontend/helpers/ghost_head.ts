@@ -408,6 +408,12 @@ export default async function ghost_head(options: any) {
     if (site.codeinjection_head) {
       head.push(site.codeinjection_head);
     }
+    if (site.google_site_verification) {
+      if (site.google_site_verification.startsWith("<meta"))
+        head.push(site.google_site_verification);
+      else
+        head.push(`<meta name="google-site-verification" content="${site.google_site_verification}" />`);
+    }
 
     if (context) {
       // head is our main array that holds our meta data

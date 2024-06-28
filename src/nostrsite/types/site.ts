@@ -68,6 +68,8 @@ export interface Site {
 
   extensions: SiteExtension[];
 
+  google_site_verification: string;
+
   config: Map<string, string>;
   custom: Map<string, string>;
 }
