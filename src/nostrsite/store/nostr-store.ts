@@ -26,7 +26,7 @@ import { StoreObject } from "../types/store";
 import { matchFilter, nip19 } from "nostr-tools";
 import { slugify } from "../../ghost/helpers/slugify";
 import { DbEvent, dbi } from "./db";
-import { PromiseQueue, RenderMode, fetchOutboxRelays, fetchRelays } from "..";
+import { PromiseQueue, RenderMode, fetchRelays } from "..";
 
 const MAX_OBJECTS = 10000;
 

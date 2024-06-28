@@ -144,12 +144,15 @@ export class NostrParser {
 
     if (!settings.url?.endsWith("/")) settings.url += "/";
 
-    settings.comments_enabled = this.config!.get("comments_enabled") === "true";
+    settings.comments_enabled =
+      settings.config.get("comments_enabled") === "true";
     settings.recommendations_enabled =
-      this.config!.get("recommendations_enabled") === "true";
+      settings.config.get("recommendations_enabled") === "true";
 
-    settings.codeinjection_head = this.config!.get("codeinjection_head") || null;
-    settings.codeinjection_foot = this.config!.get("codeinjection_foot") || null;
+    settings.codeinjection_head =
+      settings.config.get("codeinjection_head") || null;
+    settings.codeinjection_foot =
+      settings.config.get("codeinjection_foot") || null;
 
     return settings;
   }
