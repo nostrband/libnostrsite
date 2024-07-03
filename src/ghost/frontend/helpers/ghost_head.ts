@@ -349,11 +349,11 @@ export default async function ghost_head(options: any) {
       `);
 
       head.push(`
-    <script type="text/javascript" async src="https://unpkg.com/zapthreads/dist/zapthreads.iife.js"></script>
+    <script type="text/javascript" async src="https://unpkg.com/zapthreads@0.5.2/dist/zapthreads.iife.js"></script>
   `);
 
       head.push(`
-    <script async src='https://www.unpkg.com/nostr-login@latest/dist/unpkg.js'
+    <script async src="https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js"
       data-perms="sign_event:1"
       data-no-banner="true"
     ></script>
