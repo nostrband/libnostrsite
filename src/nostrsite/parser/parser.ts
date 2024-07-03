@@ -15,6 +15,7 @@ import downsize from "downsize-cjs";
 import { SiteAddr } from "../types/site-addr";
 import { slugify } from "../../ghost/helpers/slugify";
 import { load as loadHtml } from "cheerio";
+import { dbi } from "../store/db";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
@@ -24,9 +25,11 @@ export class NostrParser {
   readonly origin?: string;
   private site?: Site;
   private config?: Map<string, string>;
+  private useCache?: boolean;
 
-  constructor(origin?: string) {
+  constructor(origin?: string, useCache?: boolean) {
     this.origin = origin;
+    this.useCache = useCache;
   }
 
   public setSite(site: Site) {
@@ -205,7 +208,12 @@ export class NostrParser {
     const packageJsonUrl = theme.entries.find(
       (f) => f.path === "package.json"
     )!.url;
-    const packageJson = await fetch(packageJsonUrl).then((r) => r.json());
+    const cachedPackageJson = this.useCache ? await dbi.getCache(packageJsonUrl) : undefined;
+    const packageJson = cachedPackageJson || await fetch(packageJsonUrl).then((r) => r.json());
+    if (this.useCache && !cachedPackageJson && packageJson) {
+      await dbi.putCache(packageJsonUrl, packageJson);
+    }
+
     console.log("packageJson", packageJson);
     if (packageJson.config) {
       if (packageJson.config.custom) {

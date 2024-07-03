@@ -6,7 +6,7 @@ export interface GlobalNostrSite {
   startPwa(): Promise<void>;
   renderCurrentPage(path?: string): Promise<void>,
   newRenderer(): Renderer,
-  startSW(): void;
+  startSW(precacheEntries?: string[]): void;
   nostrTools: {
     nip19: any;
   }

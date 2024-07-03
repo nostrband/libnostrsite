@@ -1,6 +1,12 @@
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import Dexie from "dexie";
 
+export interface DbSite {
+  key: "site";
+  site_id: string;
+  created_at: number;
+}
+
 export interface DbEvent {
   id: string;
   pubkey: string;
@@ -17,19 +23,65 @@ export interface DbSync {
   syncTimestamp: number;
 }
 
+export interface DbCacheEntry {
+  id: string;
+  data: string;
+}
+
 export interface DbSchema extends Dexie {
+  site: Dexie.Table<DbSite, string>;
   events: Dexie.Table<DbEvent, string>;
+  cache: Dexie.Table<DbCacheEntry, string>;
   sync: Dexie.Table<DbSync, string>;
 }
 
 const db = new Dexie("cache_npub_pro") as DbSchema;
 
-db.version(2).stores({
+db.version(4).stores({
+  site: "key,site_id,created_at",
   events: "id,pubkey,kind,created_at,d_tag",
   sync: "site_id",
+  cache: "id",
 });
 
 export const dbi = {
+  setSite: async (site_id: string, created_at: number) => {
+    try {
+      await db.site.put({
+        key: "site",
+        site_id,
+        created_at,
+      });
+    } catch (error) {
+      console.log(`db setSite error: ${error}`);
+    }
+  },
+  getSite: async () => {
+    try {
+      const site = await db.site.toArray();
+      if (site.length > 0) return site[0];
+    } catch (error) {
+      console.log(`db getSite error: ${error}`);
+    }
+  },
+  putCache: async (id: string, data: string) => {
+    try {
+      await db.cache.put({
+        id,
+        data,
+      });
+    } catch (error) {
+      console.log(`db putCache error: ${error}`);
+    }
+  },
+  getCache: async (id: string) => {
+    try {
+      const entry = await db.cache.get(id);
+      if (entry) return entry.data;
+    } catch (error) {
+      console.log(`db getCache error: ${error}`);
+    }
+  },
   addEvents: async (events: NDKEvent[]) => {
     try {
       const dbEvents: DbEvent[] = events.map((e) => ({
@@ -42,7 +94,7 @@ export const dbi = {
         sig: e.sig || "",
         d_tag: e.tags.find((t) => t.length >= 2 && t[0] === "d")?.[1] || "",
       }));
-  
+
       await db.events.bulkPut(dbEvents);
     } catch (error) {
       console.log(`db addEvents error: ${error}`);

@@ -39,6 +39,7 @@ export class NostrStore extends RamStore {
   private maxObjects: number = MAX_OBJECTS;
   private subs: NDKSubscription[] = [];
   private engine?: ThemeEngine;
+  private fetchedRelays?: boolean;
 
   constructor(
     mode: RenderMode = "iife",
@@ -115,10 +116,21 @@ export class NostrStore extends RamStore {
 
   private async fetchRelays() {
     // already known?
-    if (this.settings.contributor_relays.length > 0) return;
+    if (
+      this.settings.contributor_relays.length > 0 ||
+      this.fetchedRelays ||
+      this.isOffline()
+    )
+      return;
+
+    // one try only
+    this.fetchedRelays = true;
 
     // fetch relays for contributors
-    const { write, read } = await fetchRelays(this.ndk, this.settings.contributor_pubkeys);
+    const { write, read } = await fetchRelays(
+      this.ndk,
+      this.settings.contributor_pubkeys
+    );
 
     this.settings.contributor_relays = write;
     this.settings.contributor_inbox_relays = read;
@@ -306,7 +318,7 @@ export class NostrStore extends RamStore {
 
   private removePost(post: Post) {
     for (const t of post.tags) {
-      t.postIds = t.postIds.filter(id => id !== post.id);
+      t.postIds = t.postIds.filter((id) => id !== post.id);
     }
     for (const a of post.authors) {
       a.count.posts--;
@@ -596,6 +608,12 @@ export class NostrStore extends RamStore {
     return filters;
   }
 
+  private isOffline() {
+    const offline = (this.mode === "sw" || this.mode === "iife") && !navigator?.onLine;
+    console.log("sw offline", offline, this.mode);
+    return offline;
+  }
+
   private async fetchByFilter(
     since?: number,
     until?: number,
@@ -607,7 +625,11 @@ export class NostrStore extends RamStore {
       return;
     }
 
-    const relays = [...this.settings.contributor_relays];
+    if (this.isOffline()) return;
+
+    const relays = [
+      ...(this.settings.contributor_relays || this.settings.admin_relays),
+    ];
 
     const sub = this.ndk.subscribe(
       filters,

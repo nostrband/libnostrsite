@@ -7,6 +7,7 @@ import NDK, { NDKEvent, NDKRelaySet, NostrEvent } from "@nostr-dev-kit/ndk";
 import { slugify } from "./ghost/helpers/slugify";
 import { Store } from ".";
 import { toRGBString } from "./color";
+import { dbi } from "./nostrsite/store/db";
 
 export function parseAddr(naddr: string): SiteAddr {
   const { type, data } = nip19.decode(naddr);
@@ -257,4 +258,20 @@ export function getProfileSlug(profile: NostrEvent | NDKEvent) {
     console.log("Bad profile content", profile.content);
     return "";
   }
+}
+
+export async function setPwaSiteAddr(addr: SiteAddr) {
+  const naddr = nip19.naddrEncode({
+    identifier: addr.identifier,
+    pubkey: addr.pubkey,
+    relays: addr.relays,
+    kind: KIND_SITE
+  });
+  await dbi.setSite(naddr, Date.now());
+}
+
+export async function getPwaSiteAddr() {
+  const site = await dbi.getSite();
+  if (!site) return undefined;
+  return parseAddr(site.site_id);
 }

@@ -1,4 +1,4 @@
-import NDK, { NDKRelaySet } from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NDKRelaySet } from "@nostr-dev-kit/ndk";
 import { KIND_CONTACTS, KIND_RELAYS, OUTBOX_RELAYS } from ".";
 
 export function isBlossomUrl(u: string) {
@@ -7,55 +7,86 @@ export function isBlossomUrl(u: string) {
     const pathExt = url.pathname.split(".");
     const segments = pathExt[0].split("/");
     // path must be /sha256-hex(.ext)?
-    const isNot = pathExt.length > 2 || segments.length > 2 || segments[1].length != 64;
-    return !isNot;  
+    const isNot =
+      pathExt.length > 2 || segments.length > 2 || segments[1].length != 64;
+    return !isNot;
   } catch {
     return false;
   }
 }
 
 export interface PromiseQueueCb {
-  cb: (...args: any[]) => Promise<void>
-  args: any[]
+  cb: (...args: any[]) => Promise<void>;
+  args: any[];
 }
 
 export class PromiseQueue {
-  queue: PromiseQueueCb[] = []
+  queue: PromiseQueueCb[] = [];
 
   constructor() {}
 
-  appender(cb: (...cbArgs: any[]) => Promise<void>): (...apArgs: any[]) => void {
+  appender(
+    cb: (...cbArgs: any[]) => Promise<void>
+  ): (...apArgs: any[]) => void {
     return (...args) => {
-      this.queue.push({ cb, args })
-      if (this.queue.length === 1) this.execute()
-    }
+      this.queue.push({ cb, args });
+      if (this.queue.length === 1) this.execute();
+    };
   }
 
   async execute() {
     // the next cb in the queue
-    const { cb, args } = this.queue[0]
+    const { cb, args } = this.queue[0];
 
     // execute the next cb
-    await cb(...args)
+    await cb(...args);
 
     // mark the last cb as done
-    this.queue.shift()
+    this.queue.shift();
 
     // have the next one? proceed
-    if (this.queue.length > 0) this.execute()
+    if (this.queue.length > 0) this.execute();
   }
 }
 
 export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
-  const events = await ndk.fetchEvents(
+  const sub = await ndk.subscribe(
     {
       // @ts-ignore
       kinds: [KIND_CONTACTS, KIND_RELAYS],
       authors: pubkeys,
     },
     { groupable: false },
-    NDKRelaySet.fromRelayUrls(OUTBOX_RELAYS, ndk)
+    NDKRelaySet.fromRelayUrls(OUTBOX_RELAYS, ndk),
+    false // auto-start
   );
+
+  const timeoutMs = 2000;
+
+  let eose = false;
+  const events: NDKEvent[] = [];
+  const queue = new PromiseQueue();
+  await new Promise<void>((ok) => {
+    const timeout = setTimeout(() => {
+      console.warn("fetchRelays timeout");
+      onEose();
+    }, timeoutMs);
+
+    const onEose = async () => {
+      if (timeout) clearTimeout(timeout);
+      if (eose) return; // timeout
+      eose = true;
+      sub.stop();
+      ok();
+    };
+
+    const onEvent = async (e: NDKEvent) => {
+      if (!eose) events.push(e);
+    };
+    sub.on("event", queue.appender(onEvent));
+    sub.on("eose", queue.appender(onEose));
+    sub.start();
+  });
 
   const writeRelays = [];
   const readRelays = [];
@@ -66,12 +97,10 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
         return e.tags
           .filter(
             (t) =>
-              t.length >= 2 &&
-              t[0] === "r" &&
-              (t.length === 2 || t[2] === mark)
+              t.length >= 2 && t[0] === "r" && (t.length === 2 || t[2] === mark)
           )
-          .map((t) => t[1])
-      }
+          .map((t) => t[1]);
+      };
       writeRelays.push(...filter("write"));
       readRelays.push(...filter("read"));
     } else {
@@ -87,14 +116,14 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
 
   return {
     write: [...new Set(writeRelays)],
-    read: [...new Set(readRelays)]
+    read: [...new Set(readRelays)],
   };
-} 
+}
 
 export async function fetchOutboxRelays(ndk: NDK, pubkeys: string[]) {
   return (await fetchRelays(ndk, pubkeys)).write;
-} 
+}
 
 export async function fetchInboxRelays(ndk: NDK, pubkeys: string[]) {
   return (await fetchRelays(ndk, pubkeys)).read;
-} 
+}

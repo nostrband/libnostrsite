@@ -77,6 +77,7 @@ export class ThemeEngine {
         filename,
         {
           ...data,
+          cache: true,
         },
         (e: any, d: string) => {
           if (e) err(e);

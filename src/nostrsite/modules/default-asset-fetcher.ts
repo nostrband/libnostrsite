@@ -8,9 +8,14 @@ import { Theme } from "../types/theme";
 export class DefaultAssetFetcher implements AssetFetcher {
   private themes: Theme[] = [];
   private cache = new Map<string, string>();
+  private onCache?: (url: string) => Promise<string | undefined>;
 
   constructor() {
     console.log("new asset fetcher");
+  }
+
+  public setOnFetchFromCache(cb: (url: string) => Promise<string>) {
+    this.onCache = cb;
   }
 
   public addTheme(theme: Theme) {
@@ -21,18 +26,13 @@ export class DefaultAssetFetcher implements AssetFetcher {
 
   public async load() {
     // prefetch partials
-    const promises: Promise<void>[] = [];
+    const promises: Promise<string>[] = [];
     for (const theme of this.themes) {
       for (const e of theme.entries) {
         if (!e.path.endsWith(".hbs")) continue;
         if (this.cache.get(e.url)) continue;
         promises.push(
-          fetch(e.url)
-            .then((d) => d.text())
-            .then((d) => {
-              console.log("prefetched", e.url);
-              this.cache.set(e.url, d);
-            })
+          this.fetchCachedExt(e.url)
         );
       }
     }
@@ -74,6 +74,25 @@ export class DefaultAssetFetcher implements AssetFetcher {
     return file;
   }
 
+  private async fetchCachedExt(url: string) {
+    if (this.onCache) {
+      const r = await this.onCache(url);
+      if (r !== undefined) {
+        console.debug("fetched from external cache", url);
+        this.cache.set(url, r);
+        return r;  
+      }
+    }
+
+    return fetch(url)
+    .then((d) => d.text())
+    .then((r) => {
+      console.debug("fetched from network", url);
+      this.cache.set(url, r);
+      return r;
+    });
+  }
+
   private async fetchCached(url: string) {
     if (url.startsWith(`/${DEFAULT_PARTIALS_DIR_NAME}/`)) {
       const name = url.split("/")[2];
@@ -89,12 +108,13 @@ export class DefaultAssetFetcher implements AssetFetcher {
     }
 
     // fetch then put to cache then return
-    return fetch(url)
-      .then((d) => d.text())
-      .then((r) => {
-        this.cache.set(url, r);
-        return r;
-      });
+    return this.fetchCachedExt(url);
+    // return fetch(url)
+    //   .then((d) => d.text())
+    //   .then((r) => {
+    //     this.cache.set(url, r);
+    //     return r;
+    //   });
   }
 
   public async fetch(file: string) {

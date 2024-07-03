@@ -303,7 +303,7 @@ export class NostrSiteRenderer implements Renderer {
     console.log("site", site);
     if (!site) throw new Error("Nostr site event not found");
 
-    this.parser = new NostrParser(origin);
+    this.parser = new NostrParser(origin, this.useCache());
 
     // site settings from the database (settingsCache)
     const settings = this.parser.parseSite(this.addr, site);
@@ -377,10 +377,19 @@ export class NostrSiteRenderer implements Renderer {
 
     // if (themes.length) this.theme = themes[0];
 
+    // cache theme assets
     if (this.caches && this.caches.themeCache) {
       await this.precacheTheme(this.caches.themeCache);
     }
 
+    // cache site images
+    const siteMediaUrls: string[] = [];
+    if (settings.icon) siteMediaUrls.push(settings.icon);
+    if (settings.logo) siteMediaUrls.push(settings.logo);
+    if (settings.cover_image) siteMediaUrls.push(settings.cover_image);
+    this.precacheUrls(siteMediaUrls);
+
+    // ready
     this.hasStarted = true;
   }
 
@@ -410,18 +419,20 @@ export class NostrSiteRenderer implements Renderer {
     await this.store!.prepare(this.engine);
   }
 
+  private precacheUrls(urls: string[]) {
+    if (!this.caches) return;
+
+    const blossom = urls.filter((u) => isBlossomUrl(u));
+    const media = urls.filter((u) => !isBlossomUrl(u));
+    if (this.caches.blossomCache)
+      this.precacheMedia(this.caches.blossomCache, blossom);
+    if (this.caches.mediaCache)
+      this.precacheMedia(this.caches.mediaCache, media);
+  }
+
   public async render(path: string) {
     const r = await this.engine!.render(path);
-
-    if (this.caches) {
-      const blossom = r.context.mediaUrls.filter((u) => isBlossomUrl(u));
-      const media = r.context.mediaUrls.filter((u) => !isBlossomUrl(u));
-      if (this.caches.blossomCache)
-        this.precacheMedia(this.caches.blossomCache, blossom);
-      if (this.caches.mediaCache)
-        this.precacheMedia(this.caches.mediaCache, media);
-    }
-
+    this.precacheUrls(r.context.mediaUrls);
     return r;
   }
 
@@ -450,6 +461,13 @@ export class NostrSiteRenderer implements Renderer {
 
   public setCaches(caches: ServiceWorkerCaches): void {
     this.caches = caches;
+
+    this.assetFetcher.setOnFetchFromCache(async (url) => {
+      if (!this.caches?.themeCache) return undefined;
+      const r = await this.caches.themeCache.match(url);
+      if (r === undefined) return r;
+      return await r.text();
+    });
   }
 
   private async cacheAll(cache: Cache, urls: string[], MAX_ACTIVE: number) {

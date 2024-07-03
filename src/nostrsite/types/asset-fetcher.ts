@@ -1,6 +1,7 @@
 import { Theme } from "./theme";
 
 export interface AssetFetcher {
+  setOnFetchFromCache(cb: (url: string) => Promise<string | undefined>): void;
 
   addTheme(theme: Theme): void;
 
