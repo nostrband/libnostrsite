@@ -1,9 +1,4 @@
-import NDK, {
-  NDKEvent,
-  NDKFilter,
-  NDKRelaySet,
-  NostrEvent,
-} from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NDKFilter, NostrEvent } from "@nostr-dev-kit/ndk";
 
 // @ts-ignore FIXME ADD TYPES
 import BrowserHbs from "browser-hbs";
@@ -16,12 +11,23 @@ import { Site } from "./types/site";
 import { ThemeEngine } from "./theme-engine";
 import { Theme } from "./types/theme";
 import { NostrStore } from "./store/nostr-store";
-import { JQUERY, KIND_PACKAGE, KIND_SITE, OUTBOX_RELAYS } from "./consts";
+import {
+  JQUERY,
+  KIND_PACKAGE,
+  KIND_SITE,
+  OUTBOX_RELAYS,
+  SITE_RELAY,
+} from "./consts";
 import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
-import { fetchOutboxRelays, isBlossomUrl } from "./utils";
+import {
+  fetchEvent,
+  fetchEvents,
+  fetchOutboxRelays,
+  isBlossomUrl,
+} from "./utils";
 import { dbi } from "./store/db";
 import { AssetFetcher, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
@@ -116,21 +122,20 @@ export class NostrSiteRenderer implements Renderer {
     // helper
     const fetchFromRelays = async (relayUrls: string[]) => {
       console.log("fetching site from relays", relayUrls);
-      return await this.ndk!.fetchEvent(
+      return await fetchEvent(
+        this.ndk!,
         {
           // @ts-ignore
           kinds: [KIND_SITE],
           authors: [this.addr.pubkey],
           "#d": [this.addr.identifier],
         },
-        { groupable: false },
-        NDKRelaySet.fromRelayUrls(relayUrls, this.ndk!)
+        relayUrls
       );
     };
 
-    // FIXME create some purplepag.es-like relay that
-    // only stores site events
-    const relays = [];
+    // seed relay
+    const relays = [SITE_RELAY];
     if (this.addr.relays) relays.push(...this.addr.relays);
 
     // fetch site object
@@ -167,8 +172,8 @@ export class NostrSiteRenderer implements Renderer {
   //   return Promise.resolve([theme, theme1, theme2, theme3]);
   // }
 
-  private async fetchTheme(settings: Site) {
-    const extIds = settings.extensions.map((x) => x.event_id);
+  private async fetchTheme() {
+    const extIds = this.settings!.extensions.map((x) => x.event_id);
     const exts: NostrEvent[] = [];
     if (this.useCache()) {
       const cachedExtEvents = await dbi.listKindEvents(KIND_PACKAGE, 10);
@@ -198,15 +203,17 @@ export class NostrSiteRenderer implements Renderer {
         ids: extIds,
       };
       console.log("fetch themes", filter);
-      const events = await this.ndk!.fetchEvents(
+      const events = await fetchEvents(
+        this.ndk!,
         filter,
-        { groupable: false },
-        NDKRelaySet.fromRelayUrls(
-          settings.extensions.map((x) => x.relay),
-          this.ndk!
-        )
+        [
+          SITE_RELAY,
+          ...this.settings!.extensions.map((x) => x.relay),
+          ...this.addr.relays,
+        ],
+        2000
       );
-      if (!events) throw new Error("Theme not found");
+      if (!events || !events.size) throw new Error("Theme not found");
 
       // put to cache
       if (this.useCache()) dbi.addEvents([...events]);
@@ -222,8 +229,12 @@ export class NostrSiteRenderer implements Renderer {
 
     // themes must be sorted by their order in the list of extensions
     themeEvents.sort((a, b) => {
-      const ai = settings.extensions.findIndex((x) => x.event_id === a.id);
-      const bi = settings.extensions.findIndex((x) => x.event_id === b.id);
+      const ai = this.settings!.extensions.findIndex(
+        (x) => x.event_id === a.id
+      );
+      const bi = this.settings!.extensions.findIndex(
+        (x) => x.event_id === b.id
+      );
       return ai - bi;
     });
     console.log("got themes", themeEvents);
@@ -337,7 +348,7 @@ export class NostrSiteRenderer implements Renderer {
     // do it in parallel to save some latency
     await Promise.all([
       // externally-supplied theme doesn't need to be fetched
-      options.theme ? Promise.resolve(null) : this.fetchTheme(settings),
+      options.theme ? Promise.resolve(null) : this.fetchTheme(),
       // externally-supplied store doesn't need to be loaded
       options.store
         ? Promise.resolve(null)

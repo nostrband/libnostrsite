@@ -58,7 +58,8 @@ export default function ghost_foot(options: any) {
     document.body.appendChild(script);
   </script>
   `);
-    //  <script type="text/javascript" async src="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js" onload=""></script>
+
+    foot.push(`<script src="https://cdn.npubpro.com/nostr-zap.js"></script>`);
   }
 
   foot.push(getPwaCode(renderOptions));

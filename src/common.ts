@@ -1,11 +1,11 @@
 import { setHtml } from "./html";
 import { nip19 } from "nostr-tools";
-import { KIND_PROFILE, KIND_SITE, OUTBOX_RELAYS } from "./nostrsite/consts";
+import { KIND_PROFILE, KIND_SITE, OUTBOX_RELAYS, SITE_RELAY } from "./nostrsite/consts";
 import { NostrSiteRenderer } from "./nostrsite/nostr-site-renderer";
 import { SiteAddr } from "./nostrsite/types/site-addr";
-import NDK, { NDKEvent, NDKRelaySet, NostrEvent } from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { slugify } from "./ghost/helpers/slugify";
-import { Store } from ".";
+import { Store, fetchEvent } from ".";
 import { toRGBString } from "./color";
 import { dbi } from "./nostrsite/store/db";
 
@@ -75,20 +75,20 @@ export async function renderCurrentPage(path = "") {
 
 export async function fetchNostrSite(addr: SiteAddr) {
   const ndk = new NDK({
-    // FIXME also add some seed relays?
-    explicitRelayUrls: addr.relays,
+    explicitRelayUrls: [SITE_RELAY],
   });
 
-  await ndk.connect();
+  ndk.connect();
 
-  const event = await ndk.fetchEvent(
+  const event = await fetchEvent(ndk, 
     {
       // @ts-ignore
       kinds: [KIND_SITE],
       authors: [addr.pubkey],
       "#d": [addr.identifier],
     },
-    { groupable: false }
+    [SITE_RELAY, ...addr.relays],
+    3000
   );
 
   // we no longer need it
@@ -100,13 +100,13 @@ export async function fetchNostrSite(addr: SiteAddr) {
 }
 
 export async function fetchProfile(ndk: NDK, pubkey: string) {
-  return await ndk.fetchEvent(
+  return await fetchEvent(
+    ndk,
     {
       kinds: [KIND_PROFILE],
       authors: [pubkey],
     },
-    { groupable: false },
-    NDKRelaySet.fromRelayUrls(OUTBOX_RELAYS, ndk)
+    OUTBOX_RELAYS
   );
 }
 

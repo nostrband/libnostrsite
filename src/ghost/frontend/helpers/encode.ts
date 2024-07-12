@@ -14,6 +14,6 @@ export default function encode(str: string, options: any) {
     return new SafeString(encodeURIComponent(uri));
   } catch (e) {
     console.log("failed to encode", uri, e);
-    throw e;
+    return new SafeString(uri);
   }
 }

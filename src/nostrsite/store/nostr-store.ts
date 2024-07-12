@@ -9,6 +9,7 @@ import { ThemeEngine } from "../theme-engine";
 import { Site } from "../types/site";
 import { RamStore } from "./ram-store";
 import {
+  BLACKLISTED_RELAYS,
   KIND_LONG_NOTE,
   KIND_NOTE,
   KIND_PACKAGE,
@@ -26,7 +27,13 @@ import { StoreObject } from "../types/store";
 import { matchFilter, nip19 } from "nostr-tools";
 import { slugify } from "../../ghost/helpers/slugify";
 import { DbEvent, dbi } from "./db";
-import { PromiseQueue, RenderMode, fetchRelays } from "..";
+import {
+  PromiseQueue,
+  RenderMode,
+  fetchEvent,
+  fetchEvents,
+  fetchRelays,
+} from "..";
 
 const MAX_OBJECTS = 10000;
 
@@ -201,6 +208,7 @@ export class NostrStore extends RamStore {
         console.log("stop sync, same cursor", newUntil);
         break;
       }
+      console.log("newUntil", until, newUntil);
       until = newUntil;
     } while (this.posts.length < this.maxObjects);
 
@@ -496,10 +504,11 @@ export class NostrStore extends RamStore {
       f["#d"] = [slugId];
     }
 
-    const event = await this.ndk.fetchEvent(
+    const event = await fetchEvent(
+      this.ndk,
       f,
-      { groupable: false },
-      NDKRelaySet.fromRelayUrls(this.settings.contributor_relays, this.ndk)
+      this.settings.contributor_relays,
+      3000
     );
     console.log("fetchObject got", slugId, objectType, event);
     if (!event || !this.matchObject(event.rawEvent())) return undefined;
@@ -519,20 +528,21 @@ export class NostrStore extends RamStore {
       .map((e) => new NDKEvent(this.ndk, e));
     console.log("cached profiles", profiles);
 
-    const nonCachedPubkeys = pubkeys.filter(
-      (p) => !profiles.find((e) => e.pubkey === p)
-    );
+    const nonCachedPubkeys = [
+      ...new Set(pubkeys.filter((p) => !profiles.find((e) => e.pubkey === p))),
+    ];
 
     if (nonCachedPubkeys.length > 0) {
       const relays = [...this.settings.contributor_relays, ...OUTBOX_RELAYS];
-
-      const events = await this.ndk.fetchEvents(
+      console.log("fetching profiles", nonCachedPubkeys, relays);
+      const events = await fetchEvents(
+        this.ndk,
         {
           kinds: [KIND_PROFILE],
           authors: pubkeys,
         },
-        { groupable: false },
-        NDKRelaySet.fromRelayUrls(relays, this.ndk)
+        relays,
+        1000 // timeoutMs
       );
       console.log("fetched profiles", { events, relays });
       if (events) profiles.push(...events);
@@ -609,7 +619,8 @@ export class NostrStore extends RamStore {
   }
 
   private isOffline() {
-    const offline = (this.mode === "sw" || this.mode === "iife") && !navigator?.onLine;
+    const offline =
+      (this.mode === "sw" || this.mode === "iife") && !navigator?.onLine;
     console.log("sw offline", offline, this.mode);
     return offline;
   }
@@ -629,7 +640,8 @@ export class NostrStore extends RamStore {
 
     const relays = [
       ...(this.settings.contributor_relays || this.settings.admin_relays),
-    ];
+    ].filter((r) => !BLACKLISTED_RELAYS.includes(r));
+    console.warn("fetchByFilter", since, until, subscribe, relays, filters);
 
     const sub = this.ndk.subscribe(
       filters,

@@ -234,6 +234,8 @@ export class NostrParser {
     const html = await marked.parse(e.content);
     const post: Post = {
       id,
+      noteId: nip19.noteEncode(e.id),
+      npub: nip19.npubEncode(e.pubkey),
       slug: slugify(tv(e, "slug") || tv(e, "d") || id),
       uuid: e.id,
       url: "",
@@ -296,6 +298,8 @@ export class NostrParser {
     const id = eventId(e);
     const post: Post = {
       id,
+      noteId: nip19.noteEncode(e.id),
+      npub: nip19.npubEncode(e.pubkey),
       slug: slugify(tv(e, "slug") || id),
       uuid: e.id,
       url: "",

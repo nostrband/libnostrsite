@@ -1,5 +1,12 @@
-import NDK, { NDKEvent, NDKRelaySet } from "@nostr-dev-kit/ndk";
-import { KIND_CONTACTS, KIND_RELAYS, OUTBOX_RELAYS } from ".";
+import NDK, { NDKEvent, NDKFilter, NDKRelaySet } from "@nostr-dev-kit/ndk";
+import {
+  BLACKLISTED_RELAYS,
+  FALLBACK_OUTBOX_RELAYS,
+  KIND_CONTACTS,
+  KIND_RELAYS,
+  OUTBOX_RELAYS,
+  eventId,
+} from ".";
 
 export function isBlossomUrl(u: string) {
   try {
@@ -50,43 +57,31 @@ export class PromiseQueue {
 }
 
 export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
-  const sub = await ndk.subscribe(
+  let events = await fetchEvents(
+    ndk,
     {
       // @ts-ignore
       kinds: [KIND_CONTACTS, KIND_RELAYS],
       authors: pubkeys,
     },
-    { groupable: false },
-    NDKRelaySet.fromRelayUrls(OUTBOX_RELAYS, ndk),
-    false // auto-start
+    OUTBOX_RELAYS,
+    2000
   );
+  console.log("relays", events);
+  if (!events.size) {
+    // all right let's add nostr.band and higher timeout
+    events = await fetchEvents(
+      ndk,
+      {
+        // @ts-ignore
+        kinds: [KIND_CONTACTS, KIND_RELAYS],
+        authors: pubkeys,
+      },
+      [...FALLBACK_OUTBOX_RELAYS, ...OUTBOX_RELAYS],
+      5000
+    );  
+  }
 
-  const timeoutMs = 2000;
-
-  let eose = false;
-  const events: NDKEvent[] = [];
-  const queue = new PromiseQueue();
-  await new Promise<void>((ok) => {
-    const timeout = setTimeout(() => {
-      console.warn("fetchRelays timeout");
-      onEose();
-    }, timeoutMs);
-
-    const onEose = async () => {
-      if (timeout) clearTimeout(timeout);
-      if (eose) return; // timeout
-      eose = true;
-      sub.stop();
-      ok();
-    };
-
-    const onEvent = async (e: NDKEvent) => {
-      if (!eose) events.push(e);
-    };
-    sub.on("event", queue.appender(onEvent));
-    sub.on("eose", queue.appender(onEose));
-    sub.start();
-  });
 
   const writeRelays = [];
   const readRelays = [];
@@ -114,9 +109,10 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
     }
   }
 
+  // NOTE: some people mistakenly mark all relays as write/read
   return {
-    write: [...new Set(writeRelays)],
-    read: [...new Set(readRelays)],
+    write: [...new Set(writeRelays.length ? writeRelays : readRelays)],
+    read: [...new Set(readRelays.length ? readRelays : writeRelays)],
   };
 }
 
@@ -126,4 +122,77 @@ export async function fetchOutboxRelays(ndk: NDK, pubkeys: string[]) {
 
 export async function fetchInboxRelays(ndk: NDK, pubkeys: string[]) {
   return (await fetchRelays(ndk, pubkeys)).read;
+}
+
+export async function fetchEvents(
+  ndk: NDK,
+  filters: NDKFilter | NDKFilter[],
+  relays: string[],
+  timeoutMs: number = 1000
+) {
+  relays = [...new Set(relays.filter((r) => !BLACKLISTED_RELAYS.includes(r)))];
+
+  // don't go crazy here! just put higher-priority relays to
+  // the front of this array
+  if (relays.length > 10) relays.length = 10;
+
+  let eose = false;
+  const events = new Map<string, NDKEvent>();
+  const sub = ndk.subscribe(
+    filters,
+    {
+      groupable: false,
+    },
+    NDKRelaySet.fromRelayUrls(relays, ndk),
+    false // autoStart
+  );
+
+  const start = Date.now();
+  return new Promise<Set<NDKEvent>>((ok) => {
+    const onEose = async () => {
+      if (timeout) clearTimeout(timeout);
+      if (eose) return;
+      eose = true;
+      sub.stop();
+      console.log(
+        "fetched in",
+        Date.now() - start,
+        "ms from",
+        relays,
+        "by",
+        filters,
+        "events",
+        [...events.values()]
+      );
+      ok(new Set(events.values()));
+    };
+
+    const timeout = setTimeout(() => {
+      console.warn(Date.now(), "fetch timeout");
+      onEose();
+    }, timeoutMs);
+
+    sub.on("eose", onEose);
+    sub.on("event", async (e) => {
+      if (eose) return;
+      const id = eventId(e);
+      const ex = events.get(id);
+      if (!ex || ex.created_at! < e.created_at) {
+        events.set(id, e);
+      }
+    });
+
+    sub.start();
+  });
+}
+
+export async function fetchEvent(
+  ndk: NDK,
+  filters: NDKFilter | NDKFilter[],
+  relays: string[],
+  timeoutMs: number = 1000
+) {
+  const events = await fetchEvents(ndk, filters, relays, timeoutMs);
+  if (events.size) return events.values().next().value;
+  return null;
 }

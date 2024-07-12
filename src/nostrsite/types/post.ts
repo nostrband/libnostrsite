@@ -4,6 +4,8 @@ import { Tag } from "./tag";
 
 export interface Post {
   id: string;
+  noteId: string;
+  npub: string;
   slug: string;
   uuid: string;
   url: string;

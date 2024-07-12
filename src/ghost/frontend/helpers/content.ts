@@ -17,6 +17,33 @@ import isUndefined from "lodash-es/isUndefined";
 import { getRenderer } from "../services/renderer";
 import { templates } from "../services/theme-engine/handlebars/template";
 
+const hexToRgb = (hex: string) => {
+  hex = hex.replace(/^#/, "");
+
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+
+  const bigint = parseInt(hex, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+
+  return { r, g, b };
+};
+const getBrightness = ({ r, g, b }: { r: number; g: number; b: number }) => {
+  return (r * 299 + g * 587 + b * 114) / 1000;
+};
+
+const getContrastingTextColor = (hex: string) => {
+  const rgb = hexToRgb(hex);
+  const brightness = getBrightness(rgb);
+  return brightness < 128 ? "#fff" : "#000";
+};
+
 function restrictedCta(options: any) {
   const { hbs } = getRenderer(options);
   const createFrame = hbs.handlebars.createFrame;
@@ -75,10 +102,26 @@ export default function content(options: any = {}) {
   // some contributor relays to fetch their replies
   if (relays.length > 5) relays.length = 5;
 
-  html += `<zap-threads 
+  if (site.config.get("no_default_plugins") !== "true") {
+    html += `<center><div
+      style='display: block; width: 100%; background-color: ${
+        site.accent_color
+      }; color: ${getContrastingTextColor(
+      site.accent_color
+    )}; border: 1px solid #aaa; border-radius: 5px; cursor: pointer; padding: 6px;'
+      id="zap-button"
+      data-anon="true"
+      data-npub="${self.npub}"
+      data-note-id="${self.noteId}"
+      data-relays="${relays.join(",")}"
+      data-button-color="${site.accent_color}"
+    >⚡️ Zap</div></center>`;
+
+    html += `<zap-threads 
   anchor="${self.id}"
-  relays="${relays.join(',')}"
+  relays="${relays.join(",")}"
   />`;
+  }
 
   return new SafeString(html);
 }

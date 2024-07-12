@@ -354,8 +354,7 @@ export default async function ghost_head(options: any) {
 
       head.push(`
     <script async src="https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js"
-      data-perms="sign_event:1"
-      data-no-banner="true"
+      data-perms="sign_event:1,sign_event:9734"
     ></script>
     <script>
       document.addEventListener("nlAuth", async (e) => {
@@ -371,6 +370,13 @@ export default async function ghost_head(options: any) {
             zapThreads.setAttribute("user", window.nostrSite.nostrTools.nip19.npubEncode(await window.nostr.getPublicKey()));
           else
             zapThreads.setAttribute("user", "");
+        }
+        const zapButton = document.querySelector('#zap-button');
+        if (zapButton) {
+          if (window.__nlAuthed)
+            zapButton.setAttribute("data-anon", "");
+          else
+            zapButton.setAttribute("data-anon", "true");
         }
       });
     </script>
