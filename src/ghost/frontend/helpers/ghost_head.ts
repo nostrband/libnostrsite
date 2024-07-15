@@ -312,7 +312,8 @@ export default async function ghost_head(options: any) {
     head.push(`<link rel="canonical" href="${canonical}" />`);
     head.push(`<link rel="og:url" href="${canonical}" />`);
     head.push(`<meta property="og:site_name" content="${site.title}" />`);
-    head.push(`<meta name="twitter:card" content="summary" />`);
+    head.push(`<meta name="twitter:card" content="${metaImage ? "summary_large_image" : "summary"}" />`);
+    head.push(`<meta name="twitter:site" content="@nostrprotocol" />`);
 
     if (root.author) {
       head.push(`<meta name="og:type" content="profile" />`);

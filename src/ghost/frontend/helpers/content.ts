@@ -16,6 +16,7 @@ import merge from "lodash-es/merge";
 import isUndefined from "lodash-es/isUndefined";
 import { getRenderer } from "../services/renderer";
 import { templates } from "../services/theme-engine/handlebars/template";
+import { OUTBOX_RELAYS } from "../../..";
 
 const hexToRgb = (hex: string) => {
   hex = hex.replace(/^#/, "");
@@ -98,9 +99,9 @@ export default function content(options: any = {}) {
     html = new SafeString(self.html);
   }
 
-  const relays = [...site.contributor_inbox_relays];
+  const relays = [...OUTBOX_RELAYS, ...site.contributor_inbox_relays];
   // some contributor relays to fetch their replies
-  if (relays.length > 5) relays.length = 5;
+  if (relays.length > 10) relays.length = 10;
 
   if (site.config.get("no_default_plugins") !== "true") {
     html += `<center><div

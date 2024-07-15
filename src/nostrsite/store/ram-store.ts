@@ -84,7 +84,7 @@ export class RamStore implements Store {
       const r = await this.get(slugId, type);
       if (r) results.push(r);
     } else {
-      const parseFilter = (prefix: string) => {
+      const parseFilter = (prefix: string, toLower: boolean = false) => {
         const filter: string[] = [];
         if (!req.filter) return filter;
 
@@ -99,16 +99,17 @@ export class RamStore implements Store {
         } else {
           filter.push(list);
         }
-        return filter;
+        if (toLower) return filter.map((f) => f.toLocaleLowerCase());
+        else return filter;
       };
 
       const slugs = parseFilter("slug");
-      const tags = parseFilter("tag");
+      const tags = parseFilter("tag", true);
       const authors = parseFilter("author");
-      const primary_tags = parseFilter("primary_tag");
+      const primary_tags = parseFilter("primary_tag", true);
       const primary_authors = parseFilter("primary_author");
 
-      if (req.tag) tags.push(req.tag);
+      if (req.tag) tags.push(req.tag.toLocaleLowerCase());
       if (req.author) authors.push(req.author);
 
       console.log("list filter", {
@@ -129,10 +130,14 @@ export class RamStore implements Store {
                 (!slugs.length || slugs.includes(p.slug)) &&
                 (!tags.length ||
                   p.tags.find(
-                    (t) => tags.includes(t.slug) || tags.includes(t.id)
+                    (t) =>
+                      tags.includes(t.slug.toLocaleLowerCase()) ||
+                      tags.includes(t.id)
                   )) &&
                 (!primary_tags.length ||
-                  primary_tags.includes(p.primary_tag?.slug || "") ||
+                  primary_tags.includes(
+                    p.primary_tag?.slug.toLocaleLowerCase() || ""
+                  ) ||
                   primary_tags.includes(p.primary_tag?.id || "")) &&
                 (!authors.length ||
                   p.authors.find(
@@ -167,12 +172,15 @@ export class RamStore implements Store {
     if (relatedNoteId) {
       const all = [...results];
       results.length = 0;
-      results.push(...all.filter(p => p.id !== relatedNoteId));
+      results.push(...all.filter((p) => p.id !== relatedNoteId));
       relatedIndex = all.findIndex((p) => p.id === relatedNoteId);
     }
 
     const total = results.length;
-    const perPage = Math.min(total, req.limit || Math.min(total, DEFAULT_MAX_LIMIT));
+    const perPage = Math.min(
+      total,
+      req.limit || Math.min(total, DEFAULT_MAX_LIMIT)
+    );
     const page = req.page && req.page > 0 ? req.page : 1;
     const pages = Math.ceil(total / perPage);
     let start = (page - 1) * perPage;
