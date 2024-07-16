@@ -275,3 +275,23 @@ export async function getPwaSiteAddr() {
   if (!site) return undefined;
   return parseAddr(site.site_id);
 }
+
+export async function getCachedSite(addr: SiteAddr) {
+  const sites = await dbi.listKindEvents(KIND_SITE, 10);
+
+  // find cached site
+  const cachedSite = sites.find(
+    (s) => s.pubkey === addr.pubkey && s.d_tag === addr.identifier
+  );
+  console.log("cache site", cachedSite, sites);
+
+  // drop old cached sites, if any
+  const oldSiteIds = sites
+    .filter((s) => s.id !== cachedSite?.id)
+    .map((s) => s.id);
+  dbi.deleteEvents(oldSiteIds);
+
+  // got cached one
+  if (cachedSite) return cachedSite;
+  else return undefined;
+}

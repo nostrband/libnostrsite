@@ -47,29 +47,46 @@ export function getPwaCode(options: RenderOptions) {
   const { ssrIndexScriptUrl = "/index.js" } = options;
 
   switch (mode) {
-    // iife mode has all the code loaded already by the bootstrap html oage,
-    // all we need is to launch the service worker after the page is rendered
+    // iife mode has all the code loaded already by the bootstrap html page,
+    // all we need is to launch the pwa and tab after the page is rendered
     case "iife":
       return `
       <script>
         window.nostrSite.startPwa();
+        window.nostrSite.startTab();
       </script>
       ${style}
     `;
 
-    // sw & preview don't need to launch anything, all code is already loaded and started
+    // preview mode has the index.js loaded, just need to init the tab,
+    // no need for sw to launch for previews.
     case "preview":
-    case "sw":
       return `
+      <script>
+        window.nostrSite.startTab();
+      </script>
       ${style}
     `;
 
-    // ssr loads an async engine script that will launch PWA as soon as it loads
-    // without blocking the pre-rendered html processing
-    // FIXME make /index.js an .env variable
+    // sw loads index.js in async and launches tab when it's loaded,
+    // no need to launch pwa as we've presumably been rendered by it.
+    case "sw":
+      return `
+      <script async type="text/javascript" 
+        src="${ssrIndexScriptUrl}" 
+        onload="window.nostrSite.startTab();"
+      ></script>
+      ${style}
+    `;
+
+    // ssr loads an async engine script that will launch PWA and tab 
+    // as soon as it loads without blocking the pre-rendered html processing
     case "ssr":
       return `
-      <script async type="text/javascript" src="${ssrIndexScriptUrl}" onload="window.nostrSite.startPwa();"></script>
+      <script async type="text/javascript" 
+        src="${ssrIndexScriptUrl}" 
+        onload="window.nostrSite.startPwa(); window.nostrSite.startTab();"
+      ></script>
       ${style}
     `;
 

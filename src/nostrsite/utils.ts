@@ -5,8 +5,10 @@ import {
   KIND_CONTACTS,
   KIND_RELAYS,
   OUTBOX_RELAYS,
+  StoreObject,
   eventId,
 } from ".";
+import { isPost, isTag, isUser } from "../ghost/frontend/utils/checks";
 
 export function isBlossomUrl(u: string) {
   try {
@@ -195,4 +197,11 @@ export async function fetchEvent(
   const events = await fetchEvents(ndk, filters, relays, timeoutMs);
   if (events.size) return events.values().next().value;
   return null;
+}
+
+export function getRelativeUrlPrefix(o: StoreObject) {
+  if (isPost(o)) return "post/";
+  else if (isTag(o)) return "tag/";
+  else if (isUser(o)) return "author/";
+  else throw new Error("Unknown data type");
 }

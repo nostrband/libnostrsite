@@ -99,8 +99,14 @@ export default function content(options: any = {}) {
     html = new SafeString(self.html);
   }
 
-  const relays = [...OUTBOX_RELAYS, ...site.contributor_inbox_relays];
   // some contributor relays to fetch their replies
+  const relays = [
+    ...new Set([
+      ...OUTBOX_RELAYS,
+      ...site.contributor_inbox_relays,
+      ...site.contributor_relays,
+    ]),
+  ];
   if (relays.length > 10) relays.length = 10;
 
   if (site.config.get("no_default_plugins") !== "true") {

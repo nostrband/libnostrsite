@@ -12,7 +12,8 @@ export type RenderMode =
   | "iife" // client-side rendering in a tab
   | "preview" // client-side rendering in a tab for theme preview
   | "sw" // client-side rendering in a service worker
-  | "ssr"; // server-side rendering
+  | "ssr" // server-side rendering
+;
 
 export type RenderOptions = {
   addr: SiteAddr;

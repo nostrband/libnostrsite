@@ -60,6 +60,15 @@ export default function ghost_foot(options: any) {
   `);
 
     foot.push(`<script src="https://cdn.npubpro.com/nostr-zap.js"></script>`);
+
+    foot.push(`
+    <script async src="https://unpkg.com/nostr-site-search@1.0.1/dist/index.js"></script>
+    <script>
+      document.addEventListener("np-search-goto", (e) => {
+        console.log("np-search-goto", e);
+        window.location.href = e.detail;
+      });
+    </script>`);
   }
 
   foot.push(getPwaCode(renderOptions));

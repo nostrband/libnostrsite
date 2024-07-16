@@ -5,7 +5,6 @@ import NDK, {
   NDKSubscription,
   NostrEvent,
 } from "@nostr-dev-kit/ndk";
-import { ThemeEngine } from "../theme-engine";
 import { Site } from "../types/site";
 import { RamStore } from "./ram-store";
 import {
@@ -38,18 +37,18 @@ import {
 const MAX_OBJECTS = 10000;
 
 export class NostrStore extends RamStore {
-  private mode: RenderMode;
+  private mode: RenderMode | "tab";
   private ndk: NDK;
   private settings: Site;
   private parser: NostrParser;
   private filters: NDKFilter[];
   private maxObjects: number = MAX_OBJECTS;
   private subs: NDKSubscription[] = [];
-  private engine?: ThemeEngine;
   private fetchedRelays?: boolean;
+  private getUrlCb?: (o: StoreObject) => string;
 
   constructor(
-    mode: RenderMode = "iife",
+    mode: RenderMode | "tab" = "iife",
     ndk: NDK,
     settings: Site,
     parser: NostrParser
@@ -236,6 +235,10 @@ export class NostrStore extends RamStore {
     await this.fetchAllObjects();
   }
 
+  private async loadTab() {
+    await this.loadFromDb(this.maxObjects);
+  }
+
   public async load(maxObjects: number = 0) {
     if (maxObjects) this.maxObjects = maxObjects;
 
@@ -250,6 +253,8 @@ export class NostrStore extends RamStore {
       await this.loadSw();
     } else if (this.mode === "ssr") {
       await this.loadSsr();
+    } else if (this.mode === "tab") {
+      await this.loadTab();
     }
 
     await this.fetchAuthors();
@@ -265,19 +270,18 @@ export class NostrStore extends RamStore {
     console.warn("loaded posts", this.posts.length);
   }
 
-  public async prepare(engine?: ThemeEngine) {
-    if (engine) this.engine = engine;
-    engine = this.engine;
-    if (!engine) throw new Error("No engine");
+  public async prepare(getUrl?: (o: StoreObject) => string) {
+    if (!getUrl) getUrl = this.getUrlCb;
+    this.getUrlCb = getUrl;
 
     this.posts.forEach((post) => {
-      post.url = engine!.getMetaDataUrl(post);
+      post.url = getUrl!(post);
     });
     this.tags.forEach((tag) => {
-      tag.url = engine!.getMetaDataUrl(tag);
+      tag.url = getUrl!(tag);
     });
     this.authors.forEach((author) => {
-      author.url = engine!.getMetaDataUrl(author);
+      author.url = getUrl!(author);
     });
   }
 
@@ -518,9 +522,12 @@ export class NostrStore extends RamStore {
     await this.prepare();
   }
 
+  private useCache() {
+    return this.mode !== "ssr" && this.mode !== "preview";
+  }
+
   private async fetchProfiles(pubkeys: string[]) {
-    const useCache = this.mode === "iife" || this.mode === "sw";
-    const cachedEvents = useCache
+    const cachedEvents = this.useCache()
       ? await dbi.listKindEvents(KIND_PROFILE, 100)
       : [];
     const profiles = cachedEvents

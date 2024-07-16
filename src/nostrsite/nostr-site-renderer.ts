@@ -31,6 +31,7 @@ import {
 import { dbi } from "./store/db";
 import { AssetFetcher, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
+import { getCachedSite } from "..";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -41,7 +42,7 @@ export class NostrSiteRenderer implements Renderer {
   private assetFetcher: AssetFetcher;
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
-  private store?: Store;
+  public store?: Store;
   private parser?: NostrParser;
   private config?: any;
   private hasStarted: boolean = false;
@@ -101,22 +102,24 @@ export class NostrSiteRenderer implements Renderer {
   private async fetchSite() {
     // cached sites
     if (this.useCache()) {
-      const sites = await dbi.listKindEvents(KIND_SITE, 10);
+      const cachedSite = await getCachedSite(this.addr);
+      if (cachedSite) return new NDKEvent(this.ndk, cachedSite)
+      // const sites = await dbi.listKindEvents(KIND_SITE, 10);
 
-      // find cached site
-      const cachedSite = sites.find(
-        (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.identifier
-      );
-      console.log("cache site", cachedSite, sites);
+      // // find cached site
+      // const cachedSite = sites.find(
+      //   (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.identifier
+      // );
+      // console.log("cache site", cachedSite, sites);
 
-      // drop old cached sites, if any
-      const oldSiteIds = sites
-        .filter((s) => s.id !== cachedSite?.id)
-        .map((s) => s.id);
-      dbi.deleteEvents(oldSiteIds);
+      // // drop old cached sites, if any
+      // const oldSiteIds = sites
+      //   .filter((s) => s.id !== cachedSite?.id)
+      //   .map((s) => s.id);
+      // dbi.deleteEvents(oldSiteIds);
 
-      // got cached one
-      if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
+      // // got cached one
+      // if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
     }
 
     // helper
@@ -166,11 +169,6 @@ export class NostrSiteRenderer implements Renderer {
 
     return site;
   }
-
-  // private async fetchSampleThemes(_: Site, __: NostrParser): Promise<Theme[]> {
-  //   console.warn("SAMPLE THEMES!");
-  //   return Promise.resolve([theme, theme1, theme2, theme3]);
-  // }
 
   private async fetchTheme() {
     const extIds = this.settings!.extensions.map((x) => x.event_id);
@@ -367,7 +365,7 @@ export class NostrSiteRenderer implements Renderer {
 
     // after data is loaded and engine is initialized,
     // prepare using the engine (assign urls etc)
-    await this.store.prepare(this.engine);
+    await this.store.prepare(this.engine.getMetaDataUrl.bind(this.engine));
 
     // some defaults
     // if (!settings.cover_image && settings.contributor_pubkeys) {
@@ -427,7 +425,7 @@ export class NostrSiteRenderer implements Renderer {
 
     // after data is loaded and engine is initialized,
     // prepare using the engine (assign urls etc)
-    await this.store!.prepare(this.engine);
+    await this.store!.prepare(this.engine.getMetaDataUrl.bind(this.engine));
   }
 
   private precacheUrls(urls: string[]) {

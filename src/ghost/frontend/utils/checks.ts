@@ -1,3 +1,5 @@
+// WTF? seriously? No better way to distinguish btw data types?!?
+
 export function isPost(jsonData: any) {
     return Object.prototype.hasOwnProperty.call(jsonData, 'html') &&
         Object.prototype.hasOwnProperty.call(jsonData, 'title') && Object.prototype.hasOwnProperty.call(jsonData, 'slug');

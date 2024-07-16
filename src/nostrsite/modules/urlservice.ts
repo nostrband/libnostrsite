@@ -1,4 +1,4 @@
-import { isPost, isTag, isUser } from "../../ghost/frontend/utils/checks";
+import { getRelativeUrlPrefix } from "..";
 import { Store } from "../types/store";
 import { NostrSiteUrlUtils } from "./urlutils";
 
@@ -9,11 +9,11 @@ export class UrlService {
   private origin: string;
   private subDir: string;
 
-  constructor(store: Store, utils: NostrSiteUrlUtils, origin: string, subir: string) {
+  constructor(store: Store, utils: NostrSiteUrlUtils, origin: string, subDir: string) {
     this.store = store;
     this.utils = utils;
     this.origin = origin;
-    this.subDir = subir;
+    this.subDir = subDir;
   }
 
   public getUrlByResource(
@@ -26,14 +26,7 @@ export class UrlService {
       withSubdirectory?: boolean;
     }
   ) {
-    let prefix = "";
-
-    // FIXME custom router here please!
-    if (isPost(data)) prefix = "post/";
-    else if (isTag(data)) prefix = "tag/";
-    else if (isUser(data)) prefix = "author/";
-    else throw new Error("Unknown data type");
-
+    const prefix = getRelativeUrlPrefix(data);
     return (
       (absolute ? this.origin : "") +
       (withSubdirectory ? this.subDir : "") +

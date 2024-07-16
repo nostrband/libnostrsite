@@ -1,4 +1,3 @@
-import { ThemeEngine } from "..";
 import { DEFAULT_MAX_LIMIT } from "../consts";
 import { Author } from "../types/author";
 import { Post } from "../types/post";
@@ -21,7 +20,7 @@ export class RamStore implements Store {
 
   constructor() {}
 
-  public async prepare(_: ThemeEngine) {}
+  public async prepare(_: (o: StoreObject) => string) {}
   public destroy() {}
 
   protected async fetchObject(
