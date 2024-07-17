@@ -53,8 +53,8 @@ export function getPwaCode(options: RenderOptions) {
     case "iife":
       return `
       <script>
-        window.nostrSite.startPwa();
         window.nostrSite.startTab();
+        window.nostrSite.startPwa();
       </script>
       ${style}
     `;
@@ -62,6 +62,7 @@ export function getPwaCode(options: RenderOptions) {
     // preview doesn't need tab for now, a) it won't work bcs tab 
     // read from cache which is empty w/ preview, and b) it's not
     // really needed to have client-side plugins work in previews
+    // FIXME actually those could work, leave it for later
     case "preview":
       return `
       ${style}
@@ -84,7 +85,7 @@ export function getPwaCode(options: RenderOptions) {
       return `
       <script async type="text/javascript" 
         src="${ssrIndexScriptUrl}" 
-        onload="window.nostrSite.startPwa(); window.nostrSite.startTab();"
+        onload="window.nostrSite.startTab(); window.nostrSite.startPwa();"
       ></script>
       ${style}
     `;

@@ -1,4 +1,4 @@
-import { NDKEvent } from "@nostr-dev-kit/ndk";
+import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import Dexie from "dexie";
 
 export interface DbSite {
@@ -82,7 +82,7 @@ export const dbi = {
       console.log(`db getCache error: ${error}`);
     }
   },
-  addEvents: async (events: NDKEvent[]) => {
+  addEvents: async (events: NDKEvent[] | NostrEvent[]) => {
     try {
       const dbEvents: DbEvent[] = events.map((e) => ({
         id: e.id || "",

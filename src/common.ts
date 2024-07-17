@@ -1,11 +1,16 @@
 import { setHtml } from "./html";
 import { nip19 } from "nostr-tools";
-import { KIND_PROFILE, KIND_SITE, OUTBOX_RELAYS, SITE_RELAY } from "./nostrsite/consts";
+import {
+  KIND_PROFILE,
+  KIND_SITE,
+  OUTBOX_RELAYS,
+  SITE_RELAY,
+} from "./nostrsite/consts";
 import { NostrSiteRenderer } from "./nostrsite/nostr-site-renderer";
 import { SiteAddr } from "./nostrsite/types/site-addr";
 import NDK, { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { slugify } from "./ghost/helpers/slugify";
-import { Store, fetchEvent } from ".";
+import { Store, fetchEvent, fetchOutboxRelays } from ".";
 import { toRGBString } from "./color";
 import { dbi } from "./nostrsite/store/db";
 
@@ -73,30 +78,64 @@ export async function renderCurrentPage(path = "") {
   console.log("renderer setHtml in ", t3 - t2);
 }
 
-export async function fetchNostrSite(addr: SiteAddr) {
-  const ndk = new NDK({
-    explicitRelayUrls: [SITE_RELAY],
-  });
+export async function fetchNostrSite(
+  addr: SiteAddr,
+  ndk?: NDK
+): Promise<NostrEvent | undefined> {
+  const tempNdk = !ndk;
+  if (!ndk) {
+    ndk = new NDK({
+      explicitRelayUrls: [SITE_RELAY],
+    });
+    ndk.connect();
+  }
+  // helper
+  const fetchFromRelays = async (relayUrls: string[]) => {
+    console.log("fetching site from relays", relayUrls);
+    return await fetchEvent(
+      ndk!,
+      {
+        // @ts-ignore
+        kinds: [KIND_SITE],
+        authors: [addr.pubkey],
+        "#d": [addr.identifier],
+      },
+      relayUrls,
+      3000
+    );
+  };
 
-  ndk.connect();
+  const relays = [SITE_RELAY];
+  if (addr.relays) relays.push(...addr.relays);
 
-  const event = await fetchEvent(ndk, 
-    {
-      // @ts-ignore
-      kinds: [KIND_SITE],
-      authors: [addr.pubkey],
-      "#d": [addr.identifier],
-    },
-    [SITE_RELAY, ...addr.relays],
-    3000
-  );
+  // fetch site object
+  let site = await fetchFromRelays(relays);
 
-  // we no longer need it
-  for (const r of ndk.pool.relays.values()) {
-    r.disconnect();
+  // not found on expected relays? look through the
+  // admin outbox relays.
+  if (!site) {
+    console.warn("site not found on addr relays", addr.relays);
+
+    const outboxRelays = await fetchOutboxRelays(ndk, [addr.pubkey]);
+    console.log("site admin outbox relays", outboxRelays);
+    if (!outboxRelays.length) {
+      console.log("Failed to find outbox relays for", addr.pubkey);
+    } else {
+      site = await fetchFromRelays(outboxRelays);
+
+      // replace the site relays
+      if (site) addr.relays = outboxRelays;
+    }
   }
 
-  return event ? event.rawEvent() : undefined;
+  // we no longer need it
+  if (tempNdk) {
+    for (const r of ndk.pool.relays.values()) {
+      r.disconnect();
+    }
+  }
+
+  return site ? site.rawEvent() : undefined;
 }
 
 export async function fetchProfile(ndk: NDK, pubkey: string) {
@@ -265,7 +304,7 @@ export async function setPwaSiteAddr(addr: SiteAddr) {
     identifier: addr.identifier,
     pubkey: addr.pubkey,
     relays: addr.relays,
-    kind: KIND_SITE
+    kind: KIND_SITE,
   });
   await dbi.setSite(naddr, Date.now());
 }
@@ -276,7 +315,9 @@ export async function getPwaSiteAddr() {
   return parseAddr(site.site_id);
 }
 
-export async function getCachedSite(addr: SiteAddr) {
+export async function getCachedSite(
+  addr: SiteAddr
+): Promise<NostrEvent | undefined> {
   const sites = await dbi.listKindEvents(KIND_SITE, 10);
 
   // find cached site

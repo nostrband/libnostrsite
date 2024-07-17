@@ -135,7 +135,7 @@ export async function fetchEvents(
   filters: NDKFilter | NDKFilter[],
   relays: string[],
   timeoutMs: number = 1000
-) {
+): Promise<Set<NDKEvent>> {
   relays = [...new Set(relays.filter((r) => !BLACKLISTED_RELAYS.includes(r)))];
 
   // don't go crazy here! just put higher-priority relays to
@@ -197,10 +197,10 @@ export async function fetchEvent(
   filters: NDKFilter | NDKFilter[],
   relays: string[],
   timeoutMs: number = 1000
-) {
+): Promise<NDKEvent | undefined> {
   const events = await fetchEvents(ndk, filters, relays, timeoutMs);
   if (events.size) return events.values().next().value;
-  return null;
+  return undefined;
 }
 
 export function getRelativeUrlPrefix(o: StoreObject) {

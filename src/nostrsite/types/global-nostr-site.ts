@@ -9,12 +9,13 @@ export interface GlobalNostrSite {
   startPwa(): Promise<void>;
   startTab(): Promise<void>;
   startSW(options: { index: string; precacheEntries?: string[] }): void;
-  renderCurrentPage(path?: string): Promise<void>,
-  newRenderer(): Renderer,
-  ndk?: NDK,
-  store?: Store,
-  parser?: NostrParser,
+  renderCurrentPage(path?: string): Promise<void>;
+  newRenderer(): Renderer;
+  tabReady?: Promise<void>;
+  ndk?: NDK;
+  store?: Store;
+  parser?: NostrParser;
   nostrTools: {
     nip19: any;
-  }
+  };
 }

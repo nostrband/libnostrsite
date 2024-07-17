@@ -177,19 +177,19 @@ export class NostrStore extends RamStore {
   private async loadIife() {
     // a fast method to get some usable set of events
 
-    // load 100 latest from db and
+    // load some posts from db and
     // fetch since latest in db until now
     const since = await this.loadFromDb(100);
-    await this.fetchAllObjects(since);
+    await this.fetchAllObjects(this.maxObjects, since);
   }
 
   private async loadPreview() {
     // fetch the latest stuff from relays
-    await this.fetchAllObjects();
+    await this.fetchAllObjects(this.maxObjects);
   }
 
-  private async fetchAllObjects(since: number = 0) {
-    console.log(Date.now(), "start sync, max", this.maxObjects);
+  private async fetchAllObjects(max: number = 0, since: number = 0) {
+    console.log(Date.now(), "start sync, max", max);
     let until = 0;
     do {
       const was_count = this.posts.length;
@@ -209,7 +209,7 @@ export class NostrStore extends RamStore {
       }
       console.log("newUntil", until, newUntil);
       until = newUntil;
-    } while (this.posts.length < this.maxObjects);
+    } while (this.posts.length < max);
 
     console.log(Date.now(), "done sync, posts", this.posts.length);
   }
@@ -222,7 +222,7 @@ export class NostrStore extends RamStore {
     const synced = sync && sync.site_id === this.settings.event.id;
 
     // sync from since
-    await this.fetchAllObjects(synced ? since : 0);
+    await this.fetchAllObjects(this.maxObjects, synced ? since : 0);
 
     // mark as synced
     if (!synced) await dbi.setSync(this.settings.event.id!);
@@ -232,11 +232,15 @@ export class NostrStore extends RamStore {
   }
 
   private async loadSsr() {
-    await this.fetchAllObjects();
+    await this.fetchAllObjects(this.maxObjects);
   }
 
   private async loadTab() {
+    // load everything from db
     await this.loadFromDb(this.maxObjects);
+    // first page load? fetch some from network
+    if (!this.posts.length) 
+      await this.fetchAllObjects(100);
   }
 
   public async load(maxObjects: number = 0) {

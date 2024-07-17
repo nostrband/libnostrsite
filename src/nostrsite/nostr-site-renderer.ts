@@ -23,15 +23,13 @@ import { NostrParser } from "./parser/parser";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import {
-  fetchEvent,
   fetchEvents,
-  fetchOutboxRelays,
   isBlossomUrl,
 } from "./utils";
 import { dbi } from "./store/db";
 import { AssetFetcher, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
-import { getCachedSite } from "..";
+import { fetchNostrSite, getCachedSite } from "..";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -82,7 +80,7 @@ export class NostrSiteRenderer implements Renderer {
     // the site admin in case addr.relays aren't responding
 
     // outbox relays
-    const relays = OUTBOX_RELAYS;
+    const relays = [SITE_RELAY, ...OUTBOX_RELAYS];
 
     // addr relays
     if (this.addr.relays) relays.push(...this.addr.relays);
@@ -104,70 +102,11 @@ export class NostrSiteRenderer implements Renderer {
     if (this.useCache()) {
       const cachedSite = await getCachedSite(this.addr);
       if (cachedSite) return new NDKEvent(this.ndk, cachedSite)
-      // const sites = await dbi.listKindEvents(KIND_SITE, 10);
-
-      // // find cached site
-      // const cachedSite = sites.find(
-      //   (s) => s.pubkey === this.addr.pubkey && s.d_tag === this.addr.identifier
-      // );
-      // console.log("cache site", cachedSite, sites);
-
-      // // drop old cached sites, if any
-      // const oldSiteIds = sites
-      //   .filter((s) => s.id !== cachedSite?.id)
-      //   .map((s) => s.id);
-      // dbi.deleteEvents(oldSiteIds);
-
-      // // got cached one
-      // if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
     }
 
-    // helper
-    const fetchFromRelays = async (relayUrls: string[]) => {
-      console.log("fetching site from relays", relayUrls);
-      return await fetchEvent(
-        this.ndk!,
-        {
-          // @ts-ignore
-          kinds: [KIND_SITE],
-          authors: [this.addr.pubkey],
-          "#d": [this.addr.identifier],
-        },
-        relayUrls
-      );
-    };
-
-    // seed relay
-    const relays = [SITE_RELAY];
-    if (this.addr.relays) relays.push(...this.addr.relays);
-
-    // fetch site object
-    let site = await fetchFromRelays(relays);
-
-    // not found on expected relays? look through the
-    // admin outbox relays
-    if (!site) {
-      console.warn("site not found on addr relays", this.addr.relays);
-
-      const outboxRelays = await fetchOutboxRelays(this.ndk!, [
-        this.addr.pubkey,
-      ]);
-      console.log("site admin outbox relays", outboxRelays);
-      if (!outboxRelays.length) {
-        console.log("Failed to find outbox relays for", this.addr.pubkey);
-      } else {
-        site = await fetchFromRelays(outboxRelays);
-
-        // replace the site relays
-        if (site) this.addr.relays = outboxRelays;
-      }
-    }
-
-    if (this.useCache()) {
-      if (site) dbi.addEvents([site]);
-    }
-
-    return site;
+    const site = await fetchNostrSite(this.addr, this.ndk);
+    if (this.useCache() && site) dbi.addEvents([site]);
+    return new NDKEvent(this.ndk, site);
   }
 
   private async fetchTheme() {
