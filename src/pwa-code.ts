@@ -58,13 +58,11 @@ export function getPwaCode(options: RenderOptions) {
       ${style}
     `;
 
-    // preview mode has the index.js loaded, just need to init the tab,
-    // no need for sw to launch for previews.
+    // preview doesn't need tab for now, a) it won't work bcs tab 
+    // read from cache which is empty w/ preview, and b) it's not
+    // really needed to have client-side plugins work in previews
     case "preview":
       return `
-      <script>
-        window.nostrSite.startTab();
-      </script>
       ${style}
     `;
 
