@@ -4,6 +4,7 @@
 // Outputs scripts and other assets at the bottom of a Ghost theme
 import { getRenderer } from "../services/renderer";
 import { getPwaCode } from "../../../pwa-code";
+import { CSS_VENOBOX, JS_SEARCH, JS_VENOBOX, JS_ZAP } from "../../..";
 
 // We use the name ghost_foot to match the helper for consistency:
 export default function ghost_foot(options: any) {
@@ -42,12 +43,12 @@ export default function ghost_foot(options: any) {
   // venobox galleries
   if (site.config.get("no_default_plugins") !== "true") {
     foot.push(`
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css" type="text/css" media="screen" />
+  <link rel="stylesheet" href="${CSS_VENOBOX}" type="text/css" media="screen" />
   <script>
     const script = document.createElement('script');
     script.async = true;
     script.type = "text/javascript";
-    script.src = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
+    script.src = "${JS_VENOBOX}";
     script.onload = () => {
       new VenoBox({ 
         selector: ".vbx-media", 
@@ -59,10 +60,10 @@ export default function ghost_foot(options: any) {
   </script>
   `);
 
-    foot.push(`<script src="https://cdn.npubpro.com/nostr-zap.js"></script>`);
+    foot.push(`<script src="${JS_ZAP}"></script>`);
 
     foot.push(`
-    <script async src="https://unpkg.com/nostr-site-search@1.0.1/dist/index.js"></script>
+    <script async src="${JS_SEARCH}"></script>
     <script>
       document.addEventListener("np-search-goto", (e) => {
         console.log("np-search-goto", e);

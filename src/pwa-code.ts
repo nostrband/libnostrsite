@@ -1,6 +1,7 @@
 import { RenderOptions } from ".";
 
 export function getPwaCode(options: RenderOptions) {
+  console.log("getPwaCode options", options);
   const style = `
   <style>
   #pwa-toast {

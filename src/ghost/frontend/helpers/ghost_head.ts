@@ -10,7 +10,7 @@
 import { getRenderer } from "../services/renderer";
 import findLastIndex from "lodash-es/findLastIndex";
 import includes from "lodash-es/includes";
-import { JQUERY } from "../../../nostrsite/consts";
+import { CSS_VENOBOX, JQUERY, JS_NOSTR_LOGIN, JS_ZAPTHREADS } from "../../../nostrsite/consts";
 
 function getMime(url: string) {
   const path = new URL(url).pathname;
@@ -346,15 +346,15 @@ export default async function ghost_head(options: any) {
     } else {
 
       head.push(`
-    <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css" />
+    <link rel="preload" as="style" href="${CSS_VENOBOX}" />
       `);
 
       head.push(`
-    <script type="text/javascript" async src="https://unpkg.com/zapthreads@0.5.2/dist/zapthreads.iife.js"></script>
+    <script type="text/javascript" async src="${JS_ZAPTHREADS}"></script>
   `);
 
       head.push(`
-    <script async src="https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js"
+    <script async src="${JS_NOSTR_LOGIN}"
       data-perms="sign_event:1,sign_event:9734"
     ></script>
     <script>

@@ -8,7 +8,7 @@ import { NostrParser } from "..";
 export interface GlobalNostrSite {
   startPwa(): Promise<void>;
   startTab(): Promise<void>;
-  startSW(precacheEntries?: string[]): void;
+  startSW(options: { index: string; precacheEntries?: string[] }): void;
   renderCurrentPage(path?: string): Promise<void>,
   newRenderer(): Renderer,
   ndk?: NDK,

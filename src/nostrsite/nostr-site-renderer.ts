@@ -297,6 +297,7 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   public async start(options: RenderOptions) {
+    console.log("renderer options", options);
     this.addr = options.addr;
     this.options = options;
 

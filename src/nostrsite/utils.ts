@@ -59,6 +59,35 @@ export class PromiseQueue {
 }
 
 export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
+
+  const writeRelays: string[] = [];
+  const readRelays: string[] = [];
+
+  const parseRelays = (events: Set<NDKEvent>) => {
+    for (const e of events) {
+      if (e.kind === KIND_RELAYS) {
+        const filter = (mark: string) => {
+          return e.tags
+            .filter(
+              (t) =>
+                t.length >= 2 && t[0] === "r" && (t.length === 2 || t[2] === mark)
+            )
+            .map((t) => t[1]);
+        };
+        writeRelays.push(...filter("write"));
+        readRelays.push(...filter("read"));
+      } else {
+        try {
+          const relays = JSON.parse(e.content);
+          for (const url in relays) {
+            if (relays[url].write) writeRelays.push(url);
+            if (relays[url].read) readRelays.push(url);
+          }
+        } catch {}
+      }
+    }  
+  }
+
   let events = await fetchEvents(
     ndk,
     {
@@ -69,8 +98,9 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
     OUTBOX_RELAYS,
     2000
   );
-  console.log("relays", events);
-  if (!events.size) {
+  parseRelays(events);
+  console.log("relays", events, readRelays, writeRelays);
+  if (!readRelays.length && !writeRelays.length) {
     // all right let's add nostr.band and higher timeout
     events = await fetchEvents(
       ndk,
@@ -81,34 +111,8 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
       },
       [...FALLBACK_OUTBOX_RELAYS, ...OUTBOX_RELAYS],
       5000
-    );  
-  }
-
-
-  const writeRelays = [];
-  const readRelays = [];
-
-  for (const e of events) {
-    if (e.kind === KIND_RELAYS) {
-      const filter = (mark: string) => {
-        return e.tags
-          .filter(
-            (t) =>
-              t.length >= 2 && t[0] === "r" && (t.length === 2 || t[2] === mark)
-          )
-          .map((t) => t[1]);
-      };
-      writeRelays.push(...filter("write"));
-      readRelays.push(...filter("read"));
-    } else {
-      try {
-        const relays = JSON.parse(e.content);
-        for (const url in relays) {
-          if (relays[url].write) writeRelays.push(url);
-          if (relays[url].read) readRelays.push(url);
-        }
-      } catch {}
-    }
+    );
+    parseRelays(events);
   }
 
   // NOTE: some people mistakenly mark all relays as write/read

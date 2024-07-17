@@ -25,3 +25,22 @@ export const SITE_RELAY = "wss://relay.npubpro.com";
 export const BLACKLISTED_RELAYS = [
   "wss://brb.io"
 ];
+
+export const JS_JQUERY = "https://code.jquery.com/jquery-3.5.1.min.js";
+export const JS_VENOBOX = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
+export const CSS_VENOBOX = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
+export const JS_ZAPTHREADS = "https://unpkg.com/zapthreads@0.5.2/dist/zapthreads.iife.js";
+export const JS_NOSTR_LOGIN = "https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js";
+export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.2/dist/index.js";
+export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
+
+export const PRECACHE_ENTRIES = [
+  // these are static and don't need revision info
+  JS_JQUERY,
+  JS_VENOBOX,
+  CSS_VENOBOX,
+  JS_ZAPTHREADS,
+  JS_NOSTR_LOGIN,
+  JS_SEARCH,
+  JS_ZAP
+];
