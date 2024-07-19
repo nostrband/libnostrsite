@@ -2,6 +2,7 @@ import { NDKEvent } from "@nostr-dev-kit/ndk";
 
 export interface Profile {
   id: string;
+  slug: string;
   profile?: {
     name?: string;
     display_name?: string;

@@ -32,6 +32,7 @@ import {
   fetchEvent,
   fetchEvents,
   fetchRelays,
+  tags,
 } from "..";
 
 const MAX_OBJECTS = 10000;
@@ -94,7 +95,7 @@ export class NostrStore extends RamStore {
           !this.matchObject(e)
       )
       .map((e) => e.id);
-    console.log("badObjectIds", badObjectIds);
+    // console.log("badObjectIds", badObjectIds);
     await dbi.deleteEvents(badObjectIds);
 
     const objects = events.filter((e) => this.matchObject(e));
@@ -239,8 +240,7 @@ export class NostrStore extends RamStore {
     // load everything from db
     await this.loadFromDb(this.maxObjects);
     // first page load? fetch some from network
-    if (!this.posts.length) 
-      await this.fetchAllObjects(100);
+    if (!this.posts.length) await this.fetchAllObjects(100);
   }
 
   public async load(maxObjects: number = 0) {
@@ -261,7 +261,9 @@ export class NostrStore extends RamStore {
       await this.loadTab();
     }
 
-    await this.fetchAuthors();
+    await this.fetchContributors();
+
+    await this.assignAuthors();
 
     await this.postProcess();
 
@@ -345,15 +347,105 @@ export class NostrStore extends RamStore {
     );
   }
 
+  private async fetchNostrLinks(events: NDKEvent[]) {
+    const pubkeys: string[] = [];
+    const relays: string[] = [];
+    const addrs: nip19.AddressPointer[] = [];
+    const ids: string[] = [];
+
+    // parse event tags
+    for (const e of events) {
+      pubkeys.push(e.pubkey);
+      for (const p of tags(e, "p")) {
+        if (p[1].length !== 64) continue;
+        pubkeys.push(p[1]);
+        if (p.length > 2 && p[2].startsWith("wss://")) relays.push(p[2]);
+      }
+      for (const t of tags(e, "e")) {
+        if (t[1].length !== 64) continue;
+        ids.push(t[1]);
+        if (t.length > 2 && t[2].startsWith("wss://")) relays.push(t[2]);
+      }
+      for (const a of tags(e, "a")) {
+        const fs = a[1].split(":");
+        if (fs.length !== 3 || fs[1].length !== 64) continue;
+        try {
+          addrs.push({
+            kind: parseInt(fs[0]),
+            pubkey: fs[1],
+            identifier: fs[2],
+          });
+        } catch {
+          continue;
+        }
+        if (a.length > 2 && a[2].startsWith("wss://")) relays.push(a[2]);
+      }
+    }
+
+    // parse content links (those might not match tags)
+    const links = events
+      .map((e) => {
+        switch (e.kind) {
+          case KIND_LONG_NOTE:
+          case KIND_NOTE:
+            return this.parser
+              .parseNostrLinks(e.content)
+              .map((l) => l.split("nostr:")[1]);
+        }
+        return [];
+      })
+      .flat();
+
+    links.forEach((l) => {
+      const id = l.split("nostr:")[1];
+      try {
+        const { type, data } = nip19.decode(id);
+        switch (type) {
+          case "npub":
+            pubkeys.push(data);
+            break;
+          case "nprofile":
+            pubkeys.push(data.pubkey);
+            relays.push(...(data.relays || []));
+            break;
+          case "naddr":
+            addrs.push(data);
+            relays.push(...(data.relays || []));
+            break;
+          case "nevent":
+            ids.push(data.id);
+            relays.push(...(data.relays || []));
+            break;
+          case "note":
+            ids.push(data);
+            break;
+        }
+      } catch {}
+    });
+
+    console.log("linked", { pubkeys, ids, addrs, relays });
+
+    // now fetch all linked stuff
+    await this.fetchProfiles(pubkeys, relays);
+
+    // FIXME also ids & addrs
+  }
+
   private async parseEvents(events: NDKEvent[]) {
+    // pre-parse and fetch all linked events
+    await this.fetchNostrLinks(events);
+
+    // now when linked events are cached we can
+    // parse events and use linked events to
+    // format content
     for (const e of events) {
       let post: Post | undefined;
       switch (e.kind) {
         case KIND_LONG_NOTE:
-          post = await this.parser.parseLongNote(e);
+          post = await this.parser.parseLongNote(e, this);
           break;
         case KIND_NOTE:
-          post = await this.parser.parseNote(e);
+          post = await this.parser.parseNote(e, this);
           break;
         default:
           console.warn("invalid kind", e);
@@ -418,29 +510,16 @@ export class NostrStore extends RamStore {
     this.posts.sort((a, b) => b.event.created_at - a.event.created_at);
   }
 
-  private async fetchAuthors() {
-    // NOTE: must be idempotent
-
-    // fetch authors
-    let pubkeys = [
+  private async fetchContributors() {
+    const pubkeys = [
       ...(this.settings.contributor_pubkeys || []),
       this.settings.admin_pubkey,
     ];
-    for (const p of this.posts) {
-      pubkeys.push(p.event.pubkey);
-      pubkeys.push(
-        ...p.event.tags
-          .filter((t) => t.length >= 2 && t[0] === "p" && t[1].length === 64)
-          .map((t) => t[1])
-      );
-    }
-
-    // only fetch new ones
-    pubkeys = pubkeys.filter(
-      (pubkey) => !this.profiles.find((p) => p.pubkey === pubkey)
-    );
-
     await this.fetchProfiles(pubkeys);
+  }
+
+  private async assignAuthors() {
+    // NOTE: must be idempotent
 
     // assign authors
     for (const post of this.posts) {
@@ -530,7 +609,12 @@ export class NostrStore extends RamStore {
     return this.mode !== "ssr" && this.mode !== "preview";
   }
 
-  private async fetchProfiles(pubkeys: string[]) {
+  private async fetchProfiles(pubkeys: string[], relayHints: string[] = []) {
+    // only fetch new ones
+    pubkeys = pubkeys.filter(
+      (pubkey) => !this.profiles.find((p) => p.pubkey === pubkey)
+    );
+
     const cachedEvents = this.useCache()
       ? await dbi.listKindEvents(KIND_PROFILE, 100)
       : [];
@@ -544,7 +628,11 @@ export class NostrStore extends RamStore {
     ];
 
     if (nonCachedPubkeys.length > 0) {
-      const relays = [...this.settings.contributor_relays, ...OUTBOX_RELAYS];
+      const relays = [
+        ...this.settings.contributor_relays,
+        ...OUTBOX_RELAYS,
+        ...relayHints,
+      ];
       console.log("fetching profiles", nonCachedPubkeys, relays);
       const events = await fetchEvents(
         this.ndk,
@@ -703,7 +791,7 @@ export class NostrStore extends RamStore {
             await this.parseEvents([e]);
 
             // ensure we load profiles
-            await this.fetchAuthors();
+            await this.assignAuthors();
 
             //
             await this.postProcess();

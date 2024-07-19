@@ -16,6 +16,7 @@ import { SiteAddr } from "../types/site-addr";
 import { slugify } from "../../ghost/helpers/slugify";
 import { load as loadHtml } from "cheerio";
 import { dbi } from "../store/db";
+import { Store } from "..";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
@@ -159,7 +160,7 @@ export class NostrParser {
     settings.codeinjection_foot =
       settings.config.get("codeinjection_foot") || null;
 
-    settings.google_site_verification = 
+    settings.google_site_verification =
       settings.config.get("google_site_verification") || "";
 
     return settings;
@@ -208,8 +209,11 @@ export class NostrParser {
     const packageJsonUrl = theme.entries.find(
       (f) => f.path === "package.json"
     )!.url;
-    const cachedPackageJson = this.useCache ? await dbi.getCache(packageJsonUrl) : undefined;
-    const packageJson = cachedPackageJson || await fetch(packageJsonUrl).then((r) => r.json());
+    const cachedPackageJson = this.useCache
+      ? await dbi.getCache(packageJsonUrl)
+      : undefined;
+    const packageJson =
+      cachedPackageJson || (await fetch(packageJsonUrl).then((r) => r.json()));
     if (this.useCache && !cachedPackageJson && packageJson) {
       await dbi.putCache(packageJsonUrl, packageJson);
     }
@@ -227,7 +231,7 @@ export class NostrParser {
     return theme;
   }
 
-  public async parseLongNote(e: NDKEvent) {
+  public async parseLongNote(e: NDKEvent, store?: Store) {
     if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
 
     const id = eventId(e);
@@ -280,6 +284,19 @@ export class NostrParser {
       event: e.rawEvent(),
       show_title_and_feature_image: true,
     };
+
+    // replace nostr npub/nprofile links in markdown
+    // with rich "Username" links
+    // FIXME if user pasted link as plaintext then this is fine,
+    // otherwise if link is already [text](url) then
+    // we'll replace it with url-inside-url
+    if (store)
+      post.markdown = await this.replaceNostrProfiles(
+        store,
+        post,
+        post.markdown || ""
+      );
+
     this.embedMedia(post);
 
     post.images = this.parseImages(post);
@@ -292,7 +309,7 @@ export class NostrParser {
     return post;
   }
 
-  public async parseNote(e: NDKEvent) {
+  public async parseNote(e: NDKEvent, store?: Store) {
     if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
 
     const id = eventId(e);
@@ -368,16 +385,33 @@ export class NostrParser {
 
     // now format content w/o the feature_image
     post.markdown = content;
-    post.html = await marked.parse(content);
+
+    // replace nostr npub/nprofile links in markdown
+    // with rich "Username" links
+    if (store)
+      post.markdown = await this.replaceNostrProfiles(store, post, content);
+
+    // parse markdown to html
+    post.html = await marked.parse(post.markdown);
+
+    // FIXME remove when it's implemented on the client as plugin
     this.embedMedia(post);
 
     // now cut all links to create a title and excerpt
     let textContent = content;
+
+    // replace nostr npub/nprofile links in textContent
+    // with @username texts
+    if (store)
+      textContent = await this.replaceNostrProfiles(store, post, content, true);
+
+    // clear the links that weren't replaced w/ text
     for (const l of post.links) textContent = textContent.replace(l, "");
     for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
     post.excerpt = downsize(textContent, { words: 50 });
-    post.title = downsize(textContent.trim().split("\n")[0], { words: 6 });
-    if (post.title !== content.trim()) post.title += "…";
+    const headline = textContent.trim().split("\n")[0];
+    post.title = downsize(headline, { words: 6 });
+    if (!post.title || post.title !== headline) post.title += "…";
 
     // short content (title === content) => empty title?
     // if (content.trim() === post.title?.trim()) post.title = null;
@@ -391,7 +425,53 @@ export class NostrParser {
     return post;
   }
 
+  private async replaceNostrProfiles(
+    store: Store,
+    post: Post,
+    s: string,
+    plainText?: boolean
+  ) {
+    console.log("replacing", s, post.nostrLinks);
+
+    for (const l of post.nostrLinks) {
+      if (!l.startsWith("nostr:npub1") && !l.startsWith("nostr:nprofile1"))
+        continue;
+
+      try {
+        let npub = l.split("nostr:")[1];
+        const { type, data } = nip19.decode(npub);
+        if (type === "nprofile") {
+          npub = nip19.npubEncode(data.pubkey);
+        }
+
+        const r = await store.list({
+          type: "profiles",
+          id: npub,
+        });
+        if (r.profiles!.length > 0) {
+          const author = r.profiles![0];
+          console.log("replacing author", s, author);
+          const name = author.profile?.display_name || author.profile?.name;
+          if (!name) continue;
+
+          if (plainText) {
+            s = s.replace(l, `@${name}`);
+          } else {
+            s = s.replace(l, `[${name}](https://njump.me/${npub})`);
+          }
+        }
+      } catch (e) {
+        console.log("bad nostr link", l, e);
+      }
+    }
+
+    return s;
+  }
+
   private embedMedia(post: Post) {
+    // FIXME remove if it's not really needed
+    this.site;
+
     // parse formatted html
     const dom = loadHtml(post.html!);
 
@@ -399,25 +479,7 @@ export class NostrParser {
     for (const url of post.links) {
       let code = "";
       if (this.isVideoUrl(url)) {
-        code = `
-<a class="vbx-media" style="text-decoration: none" data-autoplay="true" data-vbtype="video" href="${url}">
-<svg style="display: inline" fill="${
-          this.site?.accent_color || "#000000"
-        }" version="1.1" 
-   xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-	 width="16px" height="16px" viewBox="0 0 562.746 562.746"
-	 xml:space="preserve">
-<g>
-	<g>
-		<path d="M281.37,0C125.977,0,0.003,125.974,0.003,281.373c0,155.399,125.974,281.373,281.373,281.373
-			c155.393,0,281.367-125.974,281.367-281.373C562.743,125.974,436.769,0,281.37,0z M484.212,305.425L192.287,471.986
-			c-23.28,13.287-42.154,2.326-42.154-24.479V115.239c0-26.805,18.874-37.766,42.154-24.479l291.925,166.562
-			C507.491,270.602,507.491,292.145,484.212,305.425z"/>
-	</g>
-</g>
-</svg> Play video
-</a>
-`;
+        code = `<video controls src="${url}" style="width:100%;"></video>`;
       } else if (this.isAudioUrl(url)) {
         code = `<audio controls src="${url}"></audio>`;
       } else if (this.isImageUrl(url)) {
@@ -426,11 +488,6 @@ export class NostrParser {
       if (!code) continue;
 
       dom(`a[href="${url}"]`).replaceWith(code);
-
-      // post.html = post
-      //   .html!.replace(` ${url}`, ` ${code}`)
-      //   .replace(`\n${url}`, `\n${code}`)
-      //   .replace(`>${url}`, `>${code}`);
     }
 
     // done
@@ -447,8 +504,10 @@ export class NostrParser {
   }
 
   public parseProfile(e: NDKEvent): Profile {
+    const id = this.getAuthorId(e);
     return {
-      id: this.getAuthorId(e),
+      id,
+      slug: id,
       pubkey: e.pubkey,
       profile: JSON.parse(e.content),
       event: e,
@@ -505,9 +564,9 @@ export class NostrParser {
     return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
   }
 
-  private parseNostrLinks(text: string): string[] {
+  public parseNostrLinks(text: string): string[] {
     if (!text) return [];
-    const RX = /nostr:[^\s\?:]+/gi;
+    const RX = /nostr:[a-z0-9]+/gi;
     return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
   }
 

@@ -93,11 +93,8 @@ export default function content(options: any = {}) {
   }
 
   let html = self.html;
-  if (runTruncate) {
-    html = new SafeString(downsize(self.html, truncateOptions));
-  } else {
-    html = new SafeString(self.html);
-  }
+  if (runTruncate)
+    html = downsize(self.html, truncateOptions);
 
   // some contributor relays to fetch their replies
   const relays = [
@@ -110,6 +107,7 @@ export default function content(options: any = {}) {
   if (relays.length > 10) relays.length = 10;
 
   if (site.config.get("no_default_plugins") !== "true") {
+    // FIXME replace w/ HBS template to avoid code injection
     html += `<center><div
       style='display: block; width: 100%; background-color: ${
         site.accent_color

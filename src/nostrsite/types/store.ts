@@ -1,3 +1,4 @@
+import { Profile } from ".";
 import { Author } from "./author";
 import { Pagination } from "./pagination";
 import { Post } from "./post";
@@ -8,13 +9,14 @@ export interface StoreListResponse {
   posts?: Post[];
   tags?: Tag[];
   authors?: Author[];
+  profiles?: Profile[];
   recommendations?: Recommendation[];
   pagination: Pagination;
 }
 
-export type StoreObject = Post | Tag | Author | Recommendation;
+export type StoreObject = Post | Tag | Author | Recommendation | Profile;
 
-export type StoreObjectType = "posts" | "tags" | "authors" | "recommendations";
+export type StoreObjectType = "posts" | "tags" | "authors" | "recommendations" | "profiles";
 
 export interface StoreListRequest {
 

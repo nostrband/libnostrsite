@@ -44,7 +44,8 @@ export class RamStore implements Store {
 
   public getUrl(id: string, type?: string) {
     console.log("geturl", id, type, this.getSync(id, type));
-    return this.getSync(id, type)?.url;
+    if (type === "profiles") return "";
+    return (this.getSync(id, type) as undefined | Post | Author | Tag)?.url;
   }
 
   private getSync(slugId: string, type?: string): StoreObject | undefined {
@@ -63,6 +64,8 @@ export class RamStore implements Store {
         return this.tags.find((p) => p.id === slugId || p.slug === slugId);
       case "authors":
         return this.authors.find((p) => p.id === slugId || p.slug === slugId);
+      case "profiles":
+        return this.profiles.find((p) => p.id === slugId);
       case "recommendations":
         return this.recommendations.find((p) => p.id === slugId);
       default:
@@ -158,6 +161,9 @@ export class RamStore implements Store {
           break;
         case "authors":
           results.push(...this.authors);
+          break;
+        case "profiles":
+          results.push(...this.profiles);
           break;
         case "recommendations":
           results.push(...this.recommendations);
