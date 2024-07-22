@@ -96,6 +96,8 @@ export default function content(options: any = {}) {
   if (runTruncate)
     html = downsize(self.html, truncateOptions);
 
+  html = `<np-content id="${self.id}">${html}</np-content>`;
+
   // some contributor relays to fetch their replies
   const relays = [
     ...new Set([
@@ -123,6 +125,7 @@ export default function content(options: any = {}) {
     >⚡️ Zap</div></center>`;
 
     html += `<zap-threads 
+  mode="chat"
   anchor="${self.id}"
   relays="${relays.join(",")}"
   />`;

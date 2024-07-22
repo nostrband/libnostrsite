@@ -391,13 +391,18 @@ export class NostrStore extends RamStore {
             return this.parser
               .parseNostrLinks(e.content)
               .map((l) => l.split("nostr:")[1]);
+          case KIND_PROFILE:
+            const profile = this.parser.parseProfile(e);
+            return this.parser
+              .parseNostrLinks(profile.profile?.about || "")
+              .map((l) => l.split("nostr:")[1]);
         }
         return [];
       })
       .flat();
+    console.log("nostr links", events, links);
 
-    links.forEach((l) => {
-      const id = l.split("nostr:")[1];
+    links.forEach((id) => {
       try {
         const { type, data } = nip19.decode(id);
         switch (type) {
@@ -532,7 +537,7 @@ export class NostrStore extends RamStore {
         // create new author from profile
         const profile = this.profiles.find((p) => p.id === id);
         if (profile) {
-          author = this.parser.parseAuthor(profile);
+          author = await this.parser.parseAuthor(profile, this);
           this.authors.push(author);
         }
       }
@@ -645,6 +650,11 @@ export class NostrStore extends RamStore {
       );
       console.log("fetched profiles", { events, relays });
       if (events) profiles.push(...events);
+      // NOTE: links in bio are non-standard, and it's 
+      // an infinite loop here (fetching profiles that link
+      // to each other won't finish), we should implement
+      // a cache for these linked events before we try this
+      // await this.fetchNostrLinks([...events]);
     }
 
     await this.storeEvents([...profiles]);

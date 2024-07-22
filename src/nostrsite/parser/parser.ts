@@ -17,6 +17,7 @@ import { slugify } from "../../ghost/helpers/slugify";
 import { load as loadHtml } from "cheerio";
 import { dbi } from "../store/db";
 import { Store } from "..";
+// import { getOembedUrl } from "./oembed-providers";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
@@ -27,6 +28,7 @@ export class NostrParser {
   private site?: Site;
   private config?: Map<string, string>;
   private useCache?: boolean;
+  // private oembeds = new Map<string, any>();
 
   constructor(origin?: string, useCache?: boolean) {
     this.origin = origin;
@@ -285,6 +287,9 @@ export class NostrParser {
       show_title_and_feature_image: true,
     };
 
+    // oembed from built-in providers
+    //    await this.fetchOembeds(post);
+
     // replace nostr npub/nprofile links in markdown
     // with rich "Username" links
     // FIXME if user pasted link as plaintext then this is fine,
@@ -293,15 +298,17 @@ export class NostrParser {
     if (store)
       post.markdown = await this.replaceNostrProfiles(
         store,
-        post,
+        post.nostrLinks,
         post.markdown || ""
       );
 
-    this.embedMedia(post);
-
+    // images from links & oembeds
     post.images = this.parseImages(post);
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
+
+    // replace media links and oembeds
+    this.embedMedia(post);
 
     // FIXME config?
     post.og_description = post.links.find((u) => this.isVideoUrl(u)) || null;
@@ -362,8 +369,13 @@ export class NostrParser {
       show_title_and_feature_image: true,
     };
 
+    // oembed from built-in providers
+    //    await this.fetchOembeds(post);
+
     // parse images, set feature image
     post.images = this.parseImages(post);
+
+    // set feature image
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
 
@@ -389,7 +401,25 @@ export class NostrParser {
     // replace nostr npub/nprofile links in markdown
     // with rich "Username" links
     if (store)
-      post.markdown = await this.replaceNostrProfiles(store, post, content);
+      post.markdown = await this.replaceNostrProfiles(
+        store,
+        post.nostrLinks,
+        content
+      );
+
+    // if (store)
+    //   post.markdown = await this.replaceNostrQuotes(store, post, post.markdown);
+
+    // replace w/ active njump links for now
+    for (const l of post.nostrLinks) {
+      const id = l.split("nostr:")[1];
+      post.markdown = post.markdown.replace(
+        l,
+        `[${id.substring(0, 10)}...${id.substring(
+          id.length - 4
+        )}](https://njump.me/${id})`
+      );
+    }
 
     // parse markdown to html
     post.html = await marked.parse(post.markdown);
@@ -403,10 +433,22 @@ export class NostrParser {
     // replace nostr npub/nprofile links in textContent
     // with @username texts
     if (store)
-      textContent = await this.replaceNostrProfiles(store, post, content, true);
+      textContent = await this.replaceNostrProfiles(
+        store,
+        post.nostrLinks,
+        textContent,
+        true
+      );
+    // if (store)
+    //   textContent = await this.replaceNostrQuotes(store, post, textContent);
 
     // clear the links that weren't replaced w/ text
-    for (const l of post.links) textContent = textContent.replace(l, "");
+    for (const l of post.links) {
+      if (this.isVideoUrl(l)) textContent = textContent.replace(l, "🎥");
+      else if (this.isAudioUrl(l)) textContent = textContent.replace(l, "🎵");
+      else if (this.isImageUrl(l)) textContent = textContent.replace(l, "🖼️");
+      else textContent = textContent.replace(l, "");
+    }
     for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
     post.excerpt = downsize(textContent, { words: 50 });
     const headline = textContent.trim().split("\n")[0];
@@ -425,15 +467,22 @@ export class NostrParser {
     return post;
   }
 
+  // private replaceLinks(links: string[], s: string): string {
+  //   for (const l of links) {
+  //     s = s.replace(l, `[${l}](${l})`)
+  //   }
+  //   return s;
+  // }
+
   private async replaceNostrProfiles(
     store: Store,
-    post: Post,
+    nostrLinks: string[],
     s: string,
     plainText?: boolean
   ) {
-    console.log("replacing", s, post.nostrLinks);
+    // console.log("replacing", s, nostrLinks);
 
-    for (const l of post.nostrLinks) {
+    for (const l of nostrLinks) {
       if (!l.startsWith("nostr:npub1") && !l.startsWith("nostr:nprofile1"))
         continue;
 
@@ -450,7 +499,7 @@ export class NostrParser {
         });
         if (r.profiles!.length > 0) {
           const author = r.profiles![0];
-          console.log("replacing author", s, author);
+          // console.log("replacing author", s, author);
           const name = author.profile?.display_name || author.profile?.name;
           if (!name) continue;
 
@@ -468,6 +517,51 @@ export class NostrParser {
     return s;
   }
 
+  // private async replaceNostrQuotes(store: Store, post: Post, s: string) {
+  //   console.log("replacing", s, post.nostrLinks);
+  //   for (const l of post.nostrLinks) {
+  //     if (
+  //       !l.startsWith("nostr:note1") &&
+  //       !l.startsWith("nostr:nevent1") &&
+  //       !l.startsWith("nostr:naddr1")
+  //     )
+  //       continue;
+
+  //     try {
+  //       let id = l.split("nostr:")[1];
+  //       const { type, data } = nip19.decode(id);
+  //       if (type === "nevent") {
+  //         id = nip19.noteEncode(data.id);
+  //       } else if (type === "naddr") {
+  //         id = nip19.naddrEncode({
+  //           identifier: data.identifier,
+  //           kind: data.kind,
+  //           pubkey: data.pubkey,
+  //           // exclude relays
+  //         });
+  //       }
+
+  //       const r = await store.list({
+  //         type: "posts",
+  //         id,
+  //       });
+  //       if (r.posts!.length > 0) {
+  //         const post = r.posts![0];
+  //         console.log("replacing post", s, post);
+  //         const name = post.primary_author?.name
+  //           ? `@${post.primary_author?.name}: `
+  //           : "";
+  //         const quote = name + post.title;
+  //         s = s.replace(l, quote);
+  //       }
+  //     } catch (e) {
+  //       console.log("bad nostr link", l, e);
+  //     }
+  //   }
+
+  //   return s;
+  // }
+
   private embedMedia(post: Post) {
     // FIXME remove if it's not really needed
     this.site;
@@ -478,6 +572,20 @@ export class NostrParser {
     // replace media links
     for (const url of post.links) {
       let code = "";
+      // const oe = this.oembeds.get(url);
+      // if (oe && oe.html) {
+      //   code = `<iframe
+      //     allow="geolocation 'none'"
+      //     allowfullscreen="true"
+      //     referrerpolicy="no-referrer"
+      //     sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+      //     data-oembed-url="${url}"
+      //   ></iframe>`;
+      // } else if (oe && oe.thumbnail_url) {
+      //   code = `<a href="${url}" target="_blank"
+      //     class='${oe.type === "video" ? "np-oembed-video-link" : ""}'
+      //   ><img src="${oe.thumbnail_url}" /></a>`;
+      // } else
       if (this.isVideoUrl(url)) {
         code = `<video controls src="${url}" style="width:100%;"></video>`;
       } else if (this.isAudioUrl(url)) {
@@ -488,6 +596,54 @@ export class NostrParser {
       if (!code) continue;
 
       dom(`a[href="${url}"]`).replaceWith(code);
+      // if (oe && oe.html) {
+      //   const oeDom = loadHtml(oe.html);
+
+      //   // adjust size of the content iframe,
+      //   // mainly for small youtube embeds
+      //   let w = oe.width || oeDom(`iframe`).attr("width");
+      //   let h = oe.height || oeDom(`iframe`).attr("height");
+      //   if (w && h) {
+      //     const d = 500 / w;
+      //     w *= d;
+      //     h *= d;
+      //     oeDom(`iframe`).attr("width", "" + w);
+      //     oeDom(`iframe`).attr("height", "" + h);
+      //   }
+
+      //   // set srcdoc to a sandboxed same-origin iframe
+      //   // that will watch it's content and adjust it's size
+      //   // to the size of content
+      //   // NOTE: not clear if adding this additional iframe actually
+      //   // delivers any more safety than embedding the oembed html
+      //   // directly... well at least we have _some_ control over it,
+      //   // need to learn more about ways to sandbox it better
+      //   dom(`iframe[data-oembed-url="${url}"]`).attr("srcdoc", `
+      //   <!DOCTYPE html>
+      //   <html>
+      //   <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+      //   <script>
+      //     const updateSize = () => {
+      //       // doc size including body margins
+      //       const w = document.documentElement.scrollWidth;
+      //       const h = document.documentElement.scrollHeight;
+      //       console.log("iframe content size", w, h, window.frameElement);
+      //       // we can access frameElement bcs it's same-origin doc
+      //       // bcs we used srcdoc in this iframe
+      //       window.frameElement.width = w;
+      //       window.frameElement.height = h;
+      //     };
+      //     // update asap
+      //     document.addEventListener("DOMContentLoaded", updateSize);
+      //     // update again when iframes etc have loaded
+      //     window.addEventListener("load", updateSize);
+      //   </script>
+      //   <body style='margin: 0; padding: 0'>
+      //   ${oeDom.html()}
+      //   </body>
+      //   </html>
+      //   `);
+      // }
     }
 
     // done
@@ -514,8 +670,8 @@ export class NostrParser {
     };
   }
 
-  public parseAuthor(profile: Profile): Author {
-    return {
+  public async parseAuthor(profile: Profile, store?: Store): Promise<Author> {
+    const author: Author = {
       id: profile.id,
       slug: profile.id,
       name:
@@ -542,6 +698,29 @@ export class NostrParser {
       url: "",
       event: profile.event,
     };
+
+    if (author.bio) {
+      const nostrLinks = this.parseNostrLinks(author.bio);
+
+      if (store)
+        author.bio = await this.replaceNostrProfiles(
+          store,
+          nostrLinks,
+          author.bio,
+          true
+        );
+
+      // NOTE: bio doesn't support html :( - I mean themes don't 
+      // support displaying bio as html
+
+      // const links = this.parseTextLinks(author.bio);
+      // author.bio = this.replaceLinks(links, author.bio);
+
+      // // md to html
+      // author.bio = await marked.parse(author.bio);
+    }
+
+    return author;
   }
 
   private parseMarkdownImages(markdown: string | undefined): string[] {
@@ -598,6 +777,7 @@ export class NostrParser {
         case "avi":
         case "mpeg":
         case "mkv":
+        case "mov":
         case "webm":
         case "ogv":
           return true;
@@ -632,6 +812,11 @@ export class NostrParser {
     // extract from string content
     const urls = this.parseTextLinks(post.event.content);
     images.push(...urls.filter((u) => this.isImageUrl(u)));
+
+    // for (const l of post.links) {
+    //   const oe = this.oembeds.get(l);
+    //   if (oe && oe.thumbnail_url) images.push(oe.thumbnail_url);
+    // }
 
     // unique
     return [...new Set(images)];

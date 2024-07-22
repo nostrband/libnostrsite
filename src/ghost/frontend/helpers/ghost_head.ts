@@ -422,6 +422,28 @@ export default async function ghost_head(options: any) {
         head.push(`<meta name="google-site-verification" content="${site.google_site_verification}" />`);
     }
 
+    head.push(`
+    <style>
+      .np-oembed-video-link {
+        display: inline-block;
+        position: relative;
+      }
+      .np-oembed-video-link img {
+        max-width: 100%;
+      }
+      .np-oembed-video-link:after {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%,-50%);
+        width: 96px;
+        height: 96px;
+        background: url('data:image/png;base64,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');
+        background-size: cover;
+        content: '';
+      }
+    </style>
+    `);
+
     if (context) {
       // head is our main array that holds our meta data
       //   if (meta.metaDescription && meta.metaDescription.length > 0) {
