@@ -74,7 +74,7 @@ export default function excerpt(options: any) {
       html = `<div style='float: left; margin: 0 10px 10px 0;'>${code}</div>${html}`;
   }
 
-  html = `<np-excerpt id="${self.id}">${html}</np-content>`;
+  html = `<np-excerpt id="${self.id}">${html}</np-excerpt>`;
 
   return new SafeString(html);
 }
