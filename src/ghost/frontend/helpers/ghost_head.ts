@@ -340,11 +340,13 @@ export default async function ghost_head(options: any) {
       head.push(`<meta name="nostr:author" content="${root.author.id}" />`);
       head.push(`<meta name="nostr:id" content="${root.author.id}" />`);
     } else if (object) {
-      const npub = nip19.npubEncode(object.event.pubkey);
-      const author = object.primary_author?.name || object.primary_author?.id || npub;
-      head.push(`<meta name="author" content="${author}" />`);
+      const npub = nip19.npubEncode(object.event?.pubkey || site.admin_pubkey);
+      const author = object.primary_author?.name || object.primary_author?.id || "";
+      if (author)
+        head.push(`<meta name="author" content="${author}" />`);
       head.push(`<meta name="nostr:author" content="${npub}" />`);
-      head.push(`<meta name="nostr:id" content="${object.id}" />`);
+      if (object.type !== "tag")
+        head.push(`<meta name="nostr:id" content="${object.id}" />`);
     }
 
     // manifest
