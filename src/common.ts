@@ -10,9 +10,19 @@ import { NostrSiteRenderer } from "./nostrsite/nostr-site-renderer";
 import { SiteAddr } from "./nostrsite/types/site-addr";
 import NDK, { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { slugify } from "./ghost/helpers/slugify";
-import { Store, fetchEvent, fetchOutboxRelays } from ".";
+import {
+  GlobalNostrSite,
+  Store,
+  fetchEvent,
+  fetchOutboxRelays,
+  isAudioUrl,
+  isImageUrl,
+  isVideoUrl,
+} from ".";
 import { toRGBString } from "./color";
 import { dbi } from "./nostrsite/store/db";
+import { load as loadHtml } from "cheerio";
+import { getOembedUrl } from "./nostrsite/parser/oembed-providers";
 
 export function parseAddr(naddr: string): SiteAddr {
   const { type, data } = nip19.decode(naddr);
@@ -32,7 +42,8 @@ export async function getMetaAddr(): Promise<SiteAddr | undefined> {
   // <link rel="manifest" href="manifest.json" />
   const metas = document.getElementsByTagName("meta");
   for (const meta of metas) {
-    if (meta.getAttribute("property") !== "nostr:site") continue;
+    const name = meta.getAttribute("name") || meta.getAttribute("property");
+    if (name !== "nostr:site") continue;
 
     const content = meta.getAttribute("content");
     if (!content || !content.startsWith("naddr1")) {
@@ -335,4 +346,33 @@ export async function getCachedSite(
   // got cached one
   if (cachedSite) return cachedSite;
   else return undefined;
+}
+
+export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
+  const s: GlobalNostrSite = { ...tmpl };
+  if (!s.renderCurrentPage) s.renderCurrentPage = renderCurrentPage;
+  if (!s.nostrTools)
+    s.nostrTools = {
+      nip19,
+    };
+  if (!s.html)
+    s.html = {
+      loadHtml,
+    };
+  if (!s.utils)
+    s.utils = {
+      isVideoUrl,
+      isAudioUrl,
+      isImageUrl,
+      fetchEvent,
+      getOembedUrl,
+    };
+  if (!s.dbCache) {
+    s.dbCache = {
+      putCache: dbi.putCache.bind(dbi),
+      getCache: dbi.getCache.bind(dbi),
+    };
+  }
+
+  return s;
 }

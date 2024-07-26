@@ -1,6 +1,7 @@
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 
 export interface Tag {
+  type: "tag";
   id: string;
   slug: string;
   url: string;

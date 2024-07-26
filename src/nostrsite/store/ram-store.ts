@@ -17,6 +17,7 @@ export class RamStore implements Store {
   protected authors: Author[] = [];
   protected profiles: Profile[] = [];
   protected recommendations: Recommendation[] = [];
+  // protected related: Post[] = [];
 
   constructor() {}
 
@@ -60,6 +61,8 @@ export class RamStore implements Store {
     switch (type) {
       case "posts":
         return this.posts.find((p) => p.id === slugId || p.slug === slugId);
+      // case "related":
+      //   return this.related.find((p) => p.id === slugId || p.slug === slugId);
       case "tags":
         return this.tags.find((p) => p.id === slugId || p.slug === slugId);
       case "authors":

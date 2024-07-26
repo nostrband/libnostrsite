@@ -12,10 +12,12 @@ export interface GlobalNostrSite {
   renderCurrentPage(path?: string): Promise<void>;
   newRenderer(): Renderer;
   tabReady?: Promise<void>;
+  renderer?: Renderer;
   ndk?: NDK;
   store?: Store;
   parser?: NostrParser;
-  nostrTools: {
-    nip19: any;
-  };
+  nostrTools?: any;
+  html?: any;
+  utils?: any;
+  dbCache?: any;
 }

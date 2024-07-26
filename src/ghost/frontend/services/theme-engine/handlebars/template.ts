@@ -18,7 +18,7 @@ templates.execute = function execute(
   data: any,
   hbs: any
 ) {
-  console.log("execute partial", name, data, hbs.handlebars.partials);
+  console.log("execute partial", name, self, data, hbs.handlebars.partials);
   const partial = hbs.handlebars.partials[name];
 
   if (partial === undefined) {

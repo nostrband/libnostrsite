@@ -13,6 +13,7 @@ export type RenderMode =
   | "preview" // client-side rendering in a tab for theme preview
   | "sw" // client-side rendering in a service worker
   | "ssr" // server-side rendering
+  | "tab" // client-side renderer in a tab for plugins
 ;
 
 export type RenderOptions = {
@@ -36,6 +37,7 @@ export interface Renderer {
   setCaches(caches: ServiceWorkerCaches): void;
   destroy(): Promise<void>;
   render(path: string): Promise<{ result: string; context: any }>;
+  renderPartial(template: string, self: any, data: any): Promise<string>;
   onUpdate(): Promise<void>;
   getSiteMap(): Promise<string[]>;
 }

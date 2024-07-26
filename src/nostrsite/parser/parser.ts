@@ -16,8 +16,9 @@ import { SiteAddr } from "../types/site-addr";
 import { slugify } from "../../ghost/helpers/slugify";
 import { load as loadHtml } from "cheerio";
 import { dbi } from "../store/db";
-import { Store } from "..";
-// import { getOembedUrl } from "./oembed-providers";
+import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
+
+const NJUMP_DOMAIN = "njump.me";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
@@ -25,10 +26,9 @@ function fromUNIX(ts: number | undefined) {
 
 export class NostrParser {
   readonly origin?: string;
-  private site?: Site;
+  // private site?: Site;
   private config?: Map<string, string>;
   private useCache?: boolean;
-  // private oembeds = new Map<string, any>();
 
   constructor(origin?: string, useCache?: boolean) {
     this.origin = origin;
@@ -36,7 +36,7 @@ export class NostrParser {
   }
 
   public setSite(site: Site) {
-    this.site = site;
+    // this.site = site;
     this.config = site.config;
   }
 
@@ -233,12 +233,26 @@ export class NostrParser {
     return theme;
   }
 
+  public async parseEvent(e: NDKEvent, store?: Store) {
+    switch (e.kind) {
+      case KIND_LONG_NOTE:
+        return await this.parseLongNote(e, store);
+      case KIND_NOTE:
+        return await this.parseNote(e, store);
+
+      default:
+        console.warn("unsupported kind", e);
+    }
+    return undefined;
+  }
+
   public async parseLongNote(e: NDKEvent, store?: Store) {
     if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
 
     const id = eventId(e);
     const html = await marked.parse(e.content);
     const post: Post = {
+      type: "post",
       id,
       noteId: nip19.noteEncode(e.id),
       npub: nip19.npubEncode(e.pubkey),
@@ -279,7 +293,7 @@ export class NostrParser {
       tags: [],
       primary_author: null,
       authors: [],
-      markdown: e.content,
+      markdown: e.content || "",
       images: [],
       links: this.parseTextLinks(e.content),
       nostrLinks: this.parseNostrLinks(e.content),
@@ -299,8 +313,10 @@ export class NostrParser {
       post.markdown = await this.replaceNostrProfiles(
         store,
         post.nostrLinks,
-        post.markdown || ""
+        post.markdown!
       );
+
+    post.markdown = await this.replaceNostrLinks(post, post.markdown!);
 
     // images from links & oembeds
     post.images = this.parseImages(post);
@@ -308,10 +324,10 @@ export class NostrParser {
       post.feature_image = post.images[0];
 
     // replace media links and oembeds
-    this.embedMedia(post);
+    this.embedLinks(post);
 
     // FIXME config?
-    post.og_description = post.links.find((u) => this.isVideoUrl(u)) || null;
+    post.og_description = post.links.find((u) => isVideoUrl(u)) || null;
 
     return post;
   }
@@ -321,6 +337,7 @@ export class NostrParser {
 
     const id = eventId(e);
     const post: Post = {
+      type: "post",
       id,
       noteId: nip19.noteEncode(e.id),
       npub: nip19.npubEncode(e.pubkey),
@@ -407,25 +424,13 @@ export class NostrParser {
         content
       );
 
-    // if (store)
-    //   post.markdown = await this.replaceNostrQuotes(store, post, post.markdown);
-
-    // replace w/ active njump links for now
-    for (const l of post.nostrLinks) {
-      const id = l.split("nostr:")[1];
-      post.markdown = post.markdown.replace(
-        l,
-        `[${id.substring(0, 10)}...${id.substring(
-          id.length - 4
-        )}](https://njump.me/${id})`
-      );
-    }
+    post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
     // parse markdown to html
     post.html = await marked.parse(post.markdown);
 
     // FIXME remove when it's implemented on the client as plugin
-    this.embedMedia(post);
+    this.embedLinks(post);
 
     // now cut all links to create a title and excerpt
     let textContent = content;
@@ -439,16 +444,17 @@ export class NostrParser {
         textContent,
         true
       );
-    // if (store)
-    //   textContent = await this.replaceNostrQuotes(store, post, textContent);
 
     // clear the links that weren't replaced w/ text
+    let emojiContent = "";
     for (const l of post.links) {
-      if (this.isVideoUrl(l)) textContent = textContent.replace(l, "🎥");
-      else if (this.isAudioUrl(l)) textContent = textContent.replace(l, "🎵");
-      else if (this.isImageUrl(l)) textContent = textContent.replace(l, "🖼️");
-      else textContent = textContent.replace(l, "");
+      if (isVideoUrl(l)) emojiContent = "🎥";
+      else if (isAudioUrl(l)) emojiContent = "🎵";
+      else if (isImageUrl(l)) emojiContent = "🖼️";
+
+      textContent = textContent.replace(l, "");
     }
+    if (!textContent) textContent = emojiContent;
     for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
     post.excerpt = downsize(textContent, { words: 50 });
     const headline = textContent.trim().split("\n")[0];
@@ -461,7 +467,7 @@ export class NostrParser {
     // podcasts
     // if (this.getConf("podcast_media_in_og_description") === "true") {
     post.og_description =
-      post.links.find((u) => this.isVideoUrl(u) || this.isAudioUrl(u)) || null;
+      post.links.find((u) => isVideoUrl(u) || isAudioUrl(u)) || null;
     // }
 
     return post;
@@ -506,7 +512,7 @@ export class NostrParser {
           if (plainText) {
             s = s.replace(l, `@${name}`);
           } else {
-            s = s.replace(l, `[${name}](https://njump.me/${npub})`);
+            s = s.replace(l, `[${name}](https://${NJUMP_DOMAIN}/${npub})`);
           }
         }
       } catch (e) {
@@ -517,133 +523,149 @@ export class NostrParser {
     return s;
   }
 
-  // private async replaceNostrQuotes(store: Store, post: Post, s: string) {
-  //   console.log("replacing", s, post.nostrLinks);
-  //   for (const l of post.nostrLinks) {
-  //     if (
-  //       !l.startsWith("nostr:note1") &&
-  //       !l.startsWith("nostr:nevent1") &&
-  //       !l.startsWith("nostr:naddr1")
-  //     )
-  //       continue;
+  private async replaceNostrLinks(post: Post, s: string) {
+    for (const l of post.nostrLinks) {
+      const id = l.split("nostr:")[1];
+      s = s.replace(
+        l,
+        `[${id.substring(0, 10)}...${id.substring(
+          id.length - 4
+        )}](https://${NJUMP_DOMAIN}/${id})`
+      );
+    }
+    return s;
 
-  //     try {
-  //       let id = l.split("nostr:")[1];
-  //       const { type, data } = nip19.decode(id);
-  //       if (type === "nevent") {
-  //         id = nip19.noteEncode(data.id);
-  //       } else if (type === "naddr") {
-  //         id = nip19.naddrEncode({
-  //           identifier: data.identifier,
-  //           kind: data.kind,
-  //           pubkey: data.pubkey,
-  //           // exclude relays
-  //         });
-  //       }
+    // console.log("replacing", s, post.nostrLinks);
+    // for (const l of post.nostrLinks) {
+    //   if (
+    //     !l.startsWith("nostr:note1") &&
+    //     !l.startsWith("nostr:nevent1") &&
+    //     !l.startsWith("nostr:naddr1")
+    //   )
+    //     continue;
 
-  //       const r = await store.list({
-  //         type: "posts",
-  //         id,
-  //       });
-  //       if (r.posts!.length > 0) {
-  //         const post = r.posts![0];
-  //         console.log("replacing post", s, post);
-  //         const name = post.primary_author?.name
-  //           ? `@${post.primary_author?.name}: `
-  //           : "";
-  //         const quote = name + post.title;
-  //         s = s.replace(l, quote);
-  //       }
-  //     } catch (e) {
-  //       console.log("bad nostr link", l, e);
-  //     }
-  //   }
+    //   try {
+    //     let id = l.split("nostr:")[1];
+    //     const { type, data } = nip19.decode(id);
+    //     if (type === "nevent") {
+    //       id = nip19.noteEncode(data.id);
+    //     } else if (type === "naddr") {
+    //       id = nip19.naddrEncode({
+    //         identifier: data.identifier,
+    //         kind: data.kind,
+    //         pubkey: data.pubkey,
+    //         // exclude relays
+    //       });
+    //     }
 
-  //   return s;
-  // }
+    //     const r = await store.list({
+    //       type: "related",
+    //       id,
+    //     });
+    //     if (r.related!.length > 0) {
+    //       const post = r.related![0];
+    //       console.log("replacing post", s, post);
+    //       const name = post.primary_author?.name
+    //         ? `@${post.primary_author?.name}: `
+    //         : "";
+    //       if (plainText) {
+    //         const text = `\n> ${name}${post.excerpt?.replace("\n", "\n>")}...`;
+    //         s = s.replace(l, text);
+    //       } else {
+    //         const millis = Date.parse(post.published_at!);
+    //         const date = DateTime.fromMillis(millis).toFormat("LLL dd, yyyy");
+    //         const text = `\n> ${name}${post.excerpt?.replace(
+    //           "\n",
+    //           "\n>"
+    //         )}...\n[${date}](https://njump.me/${id})`;
+    //         s = s.replace(l, text);
+    //       }
+    //     }
+    //   } catch (e) {
+    //     console.log("bad nostr link", l, e);
+    //   }
+    // }
 
-  private embedMedia(post: Post) {
-    // FIXME remove if it's not really needed
-    this.site;
+    // return s;
+  }
+
+  private embedLinks(post: Post) {
+    // ok so we arrive to post.html from markdown or plaintext
+    // with nostr-links replaced w/ njump.
+
+    // the embedding of web/nostr links will be done on the
+    // client by a plugin, but we need to prepare things for it:
+    // - it shouldn't need to parse html again - it has direct access
+    // to DOM so it could simply query from there
+    // - we could make it universal and simple by wrapping/marking the
+    // to-be-embedded links with some element/class
+
+    // but also we need to convert the _media_ links to media html
+    // right here so that search engine crawlers would appreciate
+    // the presence of media and gave us a boost.
 
     // parse formatted html
     const dom = loadHtml(post.html!);
 
+    // convert nostr links to njump links
+    const allLinks = [
+      ...post.links,
+      ...post.nostrLinks.map(l => `https://${NJUMP_DOMAIN}/${l.split('nostr:')[1]}`)
+    ];
+
     // replace media links
-    for (const url of post.links) {
+    for (const url of allLinks) {
       let code = "";
-      // const oe = this.oembeds.get(url);
-      // if (oe && oe.html) {
-      //   code = `<iframe
-      //     allow="geolocation 'none'"
-      //     allowfullscreen="true"
-      //     referrerpolicy="no-referrer"
-      //     sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-      //     data-oembed-url="${url}"
-      //   ></iframe>`;
-      // } else if (oe && oe.thumbnail_url) {
-      //   code = `<a href="${url}" target="_blank"
-      //     class='${oe.type === "video" ? "np-oembed-video-link" : ""}'
-      //   ><img src="${oe.thumbnail_url}" /></a>`;
-      // } else
-      if (this.isVideoUrl(url)) {
+      if (isVideoUrl(url)) {
         code = `<video controls src="${url}" style="width:100%;"></video>`;
-      } else if (this.isAudioUrl(url)) {
+      } else if (isAudioUrl(url)) {
         code = `<audio controls src="${url}"></audio>`;
-      } else if (this.isImageUrl(url)) {
+      } else if (isImageUrl(url)) {
         code = `<a href="${url}" class="vbx-media" target="_blank"><img class="venobox" src="${url}" /></a>`;
       }
-      if (!code) continue;
 
-      dom(`a[href="${url}"]`).replaceWith(code);
-      // if (oe && oe.html) {
-      //   const oeDom = loadHtml(oe.html);
+      const node = dom(`a[href="${url}"]`);
+      let replace = false;
+      if (code) {
+        // links with an anchor (made using markdown [text](url) syntax)
+        // aren't replaced, bcs anchor would be lost, which user definitely
+        // didn't want
+        replace = node.text() === url;
+      } else {
+        // web/nostr link
+        try {
+          const u = new URL(url);
+          if (u.hostname === NJUMP_DOMAIN) {
+            // nostr link
+            const id = u.pathname.split('/')[1];
+            // console.log("embed njump", id);
+            if (
+              id.startsWith("note1") ||
+              id.startsWith("nevent1") ||
+              id.startsWith("naddr1") ||
+              id.startsWith("npub1") ||
+              id.startsWith("nprofile1")
+            ) {
+              code = `<np-embed nostr='${id}'>${node.prop('outerHTML')}</np-embed>`;
+              // njump links are replaced unconditionally, bcs
+              // we ourselves set profiles' anchors to usernames,
+              // and so we can't distinguish btw markdown-provided
+              // anchor or our own. 
+              // const a = node.text().split("...");
+              replace = true; // a.length === 2 && id.startsWith(a[0]) && id.endsWith(a[1]);
+            }
+          } else {
+            // web link
+            code = `<np-embed url='${url}'>${node.prop('outerHTML')}</np-embed>`;
+            replace = node.text() === url;
+          }
+        } catch (e) {
+          console.log("Bad link", url, e);
+        }
+      }
 
-      //   // adjust size of the content iframe,
-      //   // mainly for small youtube embeds
-      //   let w = oe.width || oeDom(`iframe`).attr("width");
-      //   let h = oe.height || oeDom(`iframe`).attr("height");
-      //   if (w && h) {
-      //     const d = 500 / w;
-      //     w *= d;
-      //     h *= d;
-      //     oeDom(`iframe`).attr("width", "" + w);
-      //     oeDom(`iframe`).attr("height", "" + h);
-      //   }
-
-      //   // set srcdoc to a sandboxed same-origin iframe
-      //   // that will watch it's content and adjust it's size
-      //   // to the size of content
-      //   // NOTE: not clear if adding this additional iframe actually
-      //   // delivers any more safety than embedding the oembed html
-      //   // directly... well at least we have _some_ control over it,
-      //   // need to learn more about ways to sandbox it better
-      //   dom(`iframe[data-oembed-url="${url}"]`).attr("srcdoc", `
-      //   <!DOCTYPE html>
-      //   <html>
-      //   <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-      //   <script>
-      //     const updateSize = () => {
-      //       // doc size including body margins
-      //       const w = document.documentElement.scrollWidth;
-      //       const h = document.documentElement.scrollHeight;
-      //       console.log("iframe content size", w, h, window.frameElement);
-      //       // we can access frameElement bcs it's same-origin doc
-      //       // bcs we used srcdoc in this iframe
-      //       window.frameElement.width = w;
-      //       window.frameElement.height = h;
-      //     };
-      //     // update asap
-      //     document.addEventListener("DOMContentLoaded", updateSize);
-      //     // update again when iframes etc have loaded
-      //     window.addEventListener("load", updateSize);
-      //   </script>
-      //   <body style='margin: 0; padding: 0'>
-      //   ${oeDom.html()}
-      //   </body>
-      //   </html>
-      //   `);
-      // }
+      // console.log("embed url", replace, url, node.html(), node.text(), code);
+      if (code && replace) node.replaceWith(code);
     }
 
     // done
@@ -672,6 +694,7 @@ export class NostrParser {
 
   public async parseAuthor(profile: Profile, store?: Store): Promise<Author> {
     const author: Author = {
+      type: "author",
       id: profile.id,
       slug: profile.id,
       name:
@@ -700,17 +723,22 @@ export class NostrParser {
     };
 
     if (author.bio) {
-      const nostrLinks = this.parseNostrLinks(author.bio);
+      store;
+      // this isn't working, bcs fetchNostrLinks doesn't look
+      // at profile bio and thus we always try fetching related
+      // stuff from network here one-by-one
+      //
+      // const nostrLinks = this.parseNostrLinks(author.bio);
 
-      if (store)
-        author.bio = await this.replaceNostrProfiles(
-          store,
-          nostrLinks,
-          author.bio,
-          true
-        );
+      // if (store)
+      //   author.bio = await this.replaceNostrProfiles(
+      //     store,
+      //     nostrLinks,
+      //     author.bio,
+      //     true
+      //   );
 
-      // NOTE: bio doesn't support html :( - I mean themes don't 
+      // NOTE: bio doesn't support html :( - I mean themes don't
       // support displaying bio as html
 
       // const links = this.parseTextLinks(author.bio);
@@ -749,59 +777,6 @@ export class NostrParser {
     return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
   }
 
-  public isImageUrl(u: string) {
-    try {
-      const url = new URL(u);
-      const ext = url.pathname.split(".").pop();
-      switch (ext?.toLowerCase()) {
-        case "png":
-        case "svg":
-        case "jpg":
-        case "jpeg":
-        case "gif":
-        case "tif":
-        case "tiff":
-        case "webp":
-          return true;
-      }
-    } catch {}
-    return false;
-  }
-
-  public isVideoUrl(u: string) {
-    try {
-      const url = new URL(u);
-      const ext = url.pathname.split(".").pop();
-      switch (ext?.toLowerCase()) {
-        case "mp4":
-        case "avi":
-        case "mpeg":
-        case "mkv":
-        case "mov":
-        case "webm":
-        case "ogv":
-          return true;
-      }
-    } catch {}
-    return false;
-  }
-
-  public isAudioUrl(u: string) {
-    try {
-      const url = new URL(u);
-      const ext = url.pathname.split(".").pop();
-      switch (ext?.toLowerCase()) {
-        case "mp3":
-        case "aac":
-        case "ogg":
-        case "wav":
-        case "weba":
-          return true;
-      }
-    } catch {}
-    return false;
-  }
-
   private parseImages(post: Post): string[] {
     const images: string[] = [];
     if (post.feature_image) images.push(post.feature_image);
@@ -811,7 +786,7 @@ export class NostrParser {
 
     // extract from string content
     const urls = this.parseTextLinks(post.event.content);
-    images.push(...urls.filter((u) => this.isImageUrl(u)));
+    images.push(...urls.filter((u) => isImageUrl(u)));
 
     // for (const l of post.links) {
     //   const oe = this.oembeds.get(l);

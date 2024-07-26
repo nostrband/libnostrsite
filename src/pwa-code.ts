@@ -68,11 +68,12 @@ export function getPwaCode(options: RenderOptions) {
       ${style}
     `;
 
-    // sw loads index.js in async and launches tab when it's loaded,
+    // sw loads index.js in sync mode so that it's started before the `load`
+    // event is fired, and launches tab when it's loaded,
     // no need to launch pwa as we've presumably been rendered by it.
     case "sw":
       return `
-      <script async type="text/javascript" 
+      <script type="text/javascript" 
         src="${ssrIndexScriptUrl}" 
         onload="window.nostrSite.startTab();"
       ></script>

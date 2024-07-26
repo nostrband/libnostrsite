@@ -1,6 +1,7 @@
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 
 export interface Author {
+  type: "author";
   id: string;
   slug: string;
   name: string;

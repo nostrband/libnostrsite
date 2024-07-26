@@ -22,10 +22,7 @@ import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
-import {
-  fetchEvents,
-  isBlossomUrl,
-} from "./utils";
+import { fetchEvents, isBlossomUrl } from "./utils";
 import { dbi } from "./store/db";
 import { AssetFetcher, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
@@ -36,7 +33,7 @@ export class NostrSiteRenderer implements Renderer {
   public settings?: Site;
   public theme?: Theme;
   private options?: RenderOptions;
-  private ndk?: NDK;
+  public ndk?: NDK;
   private assetFetcher: AssetFetcher;
   private engine?: ThemeEngine;
   private caches?: ServiceWorkerCaches;
@@ -101,7 +98,7 @@ export class NostrSiteRenderer implements Renderer {
     // cached sites
     if (this.useCache()) {
       const cachedSite = await getCachedSite(this.addr);
-      if (cachedSite) return new NDKEvent(this.ndk, cachedSite)
+      if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
     }
 
     const site = await fetchNostrSite(this.addr, this.ndk);
@@ -383,6 +380,10 @@ export class NostrSiteRenderer implements Renderer {
     const r = await this.engine!.render(path);
     this.precacheUrls(r.context.mediaUrls);
     return r;
+  }
+
+  public async renderPartial(template: string, self: any, data: any) {
+    return Promise.resolve(this.engine!.renderPartial(template, self, data));
   }
 
   public async onUpdate(): Promise<void> {

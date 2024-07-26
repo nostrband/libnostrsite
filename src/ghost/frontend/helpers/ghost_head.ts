@@ -10,7 +10,13 @@
 import { getRenderer } from "../services/renderer";
 import findLastIndex from "lodash-es/findLastIndex";
 import includes from "lodash-es/includes";
-import { CSS_VENOBOX, JQUERY, JS_NOSTR_LOGIN, JS_ZAPTHREADS } from "../../../nostrsite/consts";
+import {
+  CSS_VENOBOX,
+  JQUERY,
+  JS_NOSTR_LOGIN,
+  JS_ZAPTHREADS,
+} from "../../../nostrsite/consts";
+import { nip19 } from "nostr-tools";
 
 function getMime(url: string) {
   const path = new URL(url).pathname;
@@ -231,14 +237,6 @@ export default async function ghost_head(options: any) {
   console.log("ghost_head", options);
   const head = [];
 
-  head.push(`
-  <!-- 
-  ***********************
-   Powered by npub.pro 
-  ***********************
-  -->
-  `);
-
   const site = options.data.site;
   const root = options.data.root;
   const object = root.object;
@@ -287,14 +285,14 @@ export default async function ghost_head(options: any) {
       // <title> is usually printed by theme using {{meta_title}} helper
       head.push(`
       <meta property="og:title" content="${escapeExpression(metaTitle)}" />
-      <meta property="twitter:title" content="${escapeExpression(metaTitle)}" />
+      <meta name="twitter:title" content="${escapeExpression(metaTitle)}" />
     `);
     }
     if (metaDesc) {
       head.push(`
       <meta name="description" content="${escapeExpression(metaDesc)}" />
       <meta property="og:description" content="${escapeExpression(metaDesc)}" />
-      <meta property="twitter:description" content="${escapeExpression(
+      <meta name="twitter:description" content="${escapeExpression(
         metaDesc
       )}" />
     `);
@@ -302,35 +300,55 @@ export default async function ghost_head(options: any) {
     if (metaImage) {
       head.push(`
       <meta property="og:image" content="${escapeExpression(metaImage)}" />
-      <meta property="twitter:image" content="${escapeExpression(metaImage)}" />
-      <meta property="twitter:image:alt" content="${escapeExpression(
-        metaTitle
-      )}" />
+      <meta name="twitter:image" content="${escapeExpression(metaImage)}" />
+      <meta name="twitter:image:alt" content="${escapeExpression(metaTitle)}" />
     `);
     }
 
     head.push(`<link rel="canonical" href="${canonical}" />`);
     head.push(`<link rel="og:url" href="${canonical}" />`);
     head.push(`<meta property="og:site_name" content="${site.title}" />`);
-    head.push(`<meta name="twitter:card" content="${metaImage ? "summary_large_image" : "summary"}" />`);
+    head.push(
+      `<meta name="twitter:card" content="${
+        metaImage ? "summary_large_image" : "summary"
+      }" />`
+    );
     head.push(`<meta name="twitter:site" content="@nostrprotocol" />`);
 
     if (root.author) {
-      head.push(`<meta name="og:type" content="profile" />`);
+      head.push(`<meta property="og:type" content="profile" />`);
       head.push(
         `<meta property="og:profile:username" content="${root.author.name}" />`
       );
     } else {
-      head.push(`<meta name="og:type" content="website" />`);
+      head.push(`<meta property="og:type" content="website" />`);
     }
 
+    // after important meta is printed
+    head.push(`
+    <!-- 
+    ***********************
+     Powered by npub.pro 
+    ***********************
+    -->
+    `);
+
     // site id for pwa code to function and for crawlers to see
-    head.push(`<meta property="nostr:site" content="${site.naddr}" >`);
+    head.push(`<meta name="nostr:site" content="${site.naddr}" />`);
+    if (root.author) {
+      head.push(`<meta name="author" content="${root.author.name || root.author.id}" />`);
+      head.push(`<meta name="nostr:author" content="${root.author.id}" />`);
+      head.push(`<meta name="nostr:id" content="${root.author.id}" />`);
+    } else if (object) {
+      const npub = nip19.npubEncode(object.event.pubkey);
+      const author = object.primary_author?.name || object.primary_author?.id || npub;
+      head.push(`<meta name="author" content="${author}" />`);
+      head.push(`<meta name="nostr:author" content="${npub}" />`);
+      head.push(`<meta name="nostr:id" content="${object.id}" />`);
+    }
 
     // manifest
-    head.push(
-      `<link rel="manifest" href="${site.url}manifest.webmanifest"></head>`
-    );
+    head.push(`<link rel="manifest" href="${site.url}manifest.webmanifest" />`);
 
     // jquery is assumed by many themes
     head.push(`
@@ -344,7 +362,6 @@ export default async function ghost_head(options: any) {
     if (site.config.get("no_default_plugins") === "true") {
       console.log("default plugins turned off");
     } else {
-
       head.push(`
     <link rel="preload" as="style" href="${CSS_VENOBOX}" />
       `);
@@ -419,7 +436,9 @@ export default async function ghost_head(options: any) {
       if (site.google_site_verification.startsWith("<meta"))
         head.push(site.google_site_verification);
       else
-        head.push(`<meta name="google-site-verification" content="${site.google_site_verification}" />`);
+        head.push(
+          `<meta name="google-site-verification" content="${site.google_site_verification}" />`
+        );
     }
 
     head.push(`

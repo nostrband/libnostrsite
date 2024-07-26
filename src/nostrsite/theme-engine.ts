@@ -30,6 +30,7 @@ import {
 import merge from "lodash-es/merge";
 import toNumber from "lodash-es/toNumber";
 import { RenderOptions } from ".";
+import { templates } from "../ghost/frontend/services/theme-engine/handlebars/template";
 
 const DEFAULT_POSTS_PER_PAGE = 6;
 
@@ -85,6 +86,16 @@ export class ThemeEngine {
         }
       )
     );
+  }
+
+  public renderPartial(template: string, self: any, locals: any) {
+    const options = this.hbs.getTemplateOptions();
+    const localTemplateOptions = this.hbs.getLocalTemplateOptions(locals);
+    // attach options etc to 'locals'
+    locals = merge(locals, localTemplateOptions, options)
+
+    console.log("renderPartial", { template, self, locals });
+    return templates.execute(template, self, locals, this.hbs);
   }
 
   public getMetaDataUrl(data: any, absolute?: boolean) {
@@ -145,6 +156,10 @@ export class ThemeEngine {
       cache: true,
     });
 
+    // pre-cache partial templates
+    console.log("caching hbs partials");
+    await new Promise((ok) => this.hbs.cachePartials(ok));
+
     // setup helpers
     initHelpers(this.hbs);
 
@@ -187,7 +202,6 @@ export class ThemeEngine {
         //   //     resource.feature_image_caption
         //   //   );
         //   // }
-
         //   // some properties are extracted to local template data to force one way of using it
         //   // delete resource.show_title_and_feature_image;
         // });
@@ -211,7 +225,7 @@ export class ThemeEngine {
     // adjust @site.url for http/https based on the incoming request
     const siteData = {
       // we use relative url here!
-//      url: this.urlUtils!.urlFor("home", { trailingSlash: false }, true),
+      //      url: this.urlUtils!.urlFor("home", { trailingSlash: false }, true),
     };
 
     // @TODO: it would be nicer if this was proper middleware somehow...
@@ -282,7 +296,9 @@ export class ThemeEngine {
       data.object = await this.store.get(slugId, "posts");
       data.post = data.object as Post;
       data.page = {
-        show_title_and_feature_image: data.post ? data.post.show_title_and_feature_image : true,
+        show_title_and_feature_image: data.post
+          ? data.post.show_title_and_feature_image
+          : true,
       };
     } else if (route.context.includes("tag")) {
       const slugId = route.param!;
@@ -313,7 +329,9 @@ export class ThemeEngine {
     // FIXME assets from other objects?
     if (data.posts) {
       // @ts-ignore
-      data.mediaUrls.push(...data.posts.map((p) => p.feature_image).filter(i => !!i));
+      data.mediaUrls.push(
+        ...data.posts.map((p) => p.feature_image || "").filter((i) => !!i)
+      );
     }
     if (data.post) data.mediaUrls.push(...data.post.images);
 
@@ -361,7 +379,7 @@ export class ThemeEngine {
     const put = (p: string) => {
       const path = `${prefix}${p}`;
       map.push(path);
-    }
+    };
     put("/");
 
     const posts = (await this.store.list({ type: "posts", limit: 1000 })).posts;
@@ -370,16 +388,17 @@ export class ThemeEngine {
     // OTOH, object.url is filled in parser, so it's already a mess...
     const limit =
       ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
-    for (let i = 1; i <= posts!.length / limit; i++)
-      put(`/page/${i}`);
+    for (let i = 1; i <= posts!.length / limit; i++) put(`/page/${i}`);
 
     for (const p of posts!) {
       put(p.url);
     }
-    for (const t of (await this.store.list({ type: "tags", limit: 100 })).tags!) {
+    for (const t of (await this.store.list({ type: "tags", limit: 100 }))
+      .tags!) {
       put(t.url);
     }
-    for (const a of (await this.store.list({ type: "authors", limit: 10 })).authors!) {
+    for (const a of (await this.store.list({ type: "authors", limit: 10 }))
+      .authors!) {
       put(a.url);
     }
 

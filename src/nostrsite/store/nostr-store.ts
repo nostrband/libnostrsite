@@ -38,7 +38,7 @@ import {
 const MAX_OBJECTS = 10000;
 
 export class NostrStore extends RamStore {
-  private mode: RenderMode | "tab";
+  private mode: RenderMode;
   private ndk: NDK;
   private settings: Site;
   private parser: NostrParser;
@@ -49,7 +49,7 @@ export class NostrStore extends RamStore {
   private getUrlCb?: (o: StoreObject) => string;
 
   constructor(
-    mode: RenderMode | "tab" = "iife",
+    mode: RenderMode = "iife",
     ndk: NDK,
     settings: Site,
     parser: NostrParser
@@ -312,6 +312,7 @@ export class NostrStore extends RamStore {
 
       const existingTag = this.tags.find((t) => t.id === tagName);
       const tag: Tag = existingTag || {
+        type: "tag",
         id: tagName,
         url: "",
         slug: slugify(tagName),
@@ -348,10 +349,12 @@ export class NostrStore extends RamStore {
   }
 
   private async fetchNostrLinks(events: NDKEvent[]) {
+    console.log("fetchNostrLinks", events.length, events);
     const pubkeys: string[] = [];
     const relays: string[] = [];
-    const addrs: nip19.AddressPointer[] = [];
-    const ids: string[] = [];
+    // const preAddrs: nip19.AddressPointer[] = [];
+    // const reAddrs: nip19.AddressPointer[] = [];
+    // const ids: string[] = [];
 
     // parse event tags
     for (const e of events) {
@@ -361,79 +364,123 @@ export class NostrStore extends RamStore {
         pubkeys.push(p[1]);
         if (p.length > 2 && p[2].startsWith("wss://")) relays.push(p[2]);
       }
-      for (const t of tags(e, "e")) {
-        if (t[1].length !== 64) continue;
-        ids.push(t[1]);
-        if (t.length > 2 && t[2].startsWith("wss://")) relays.push(t[2]);
-      }
-      for (const a of tags(e, "a")) {
-        const fs = a[1].split(":");
-        if (fs.length !== 3 || fs[1].length !== 64) continue;
-        try {
-          addrs.push({
-            kind: parseInt(fs[0]),
-            pubkey: fs[1],
-            identifier: fs[2],
-          });
-        } catch {
-          continue;
-        }
-        if (a.length > 2 && a[2].startsWith("wss://")) relays.push(a[2]);
-      }
+      // for (const t of tags(e, "e")) {
+      //   if (t[1].length !== 64) continue;
+      //   ids.push(t[1]);
+      //   if (t.length > 2 && t[2].startsWith("wss://")) relays.push(t[2]);
+      // }
+      // for (const a of tags(e, "a")) {
+      //   const fs = a[1].split(":");
+      //   if (fs.length !== 3 || fs[1].length !== 64) continue;
+      //   try {
+      //     (fs[2] ? preAddrs : reAddrs).push({
+      //       kind: parseInt(fs[0]),
+      //       pubkey: fs[1],
+      //       identifier: fs[2],
+      //     });
+      //   } catch {
+      //     continue;
+      //   }
+      //   if (a.length > 2 && a[2].startsWith("wss://")) relays.push(a[2]);
+      // }
     }
 
-    // parse content links (those might not match tags)
-    const links = events
-      .map((e) => {
-        switch (e.kind) {
-          case KIND_LONG_NOTE:
-          case KIND_NOTE:
-            return this.parser
-              .parseNostrLinks(e.content)
-              .map((l) => l.split("nostr:")[1]);
-          case KIND_PROFILE:
-            const profile = this.parser.parseProfile(e);
-            return this.parser
-              .parseNostrLinks(profile.profile?.about || "")
-              .map((l) => l.split("nostr:")[1]);
-        }
-        return [];
-      })
-      .flat();
-    console.log("nostr links", events, links);
+      // parse content links (those might not match tags)
+      const links = events
+        .map((e) => {
+          switch (e.kind) {
+            case KIND_LONG_NOTE:
+            case KIND_NOTE:
+              return this.parser
+                .parseNostrLinks(e.content)
+                .map((l) => l.split("nostr:")[1]);
+            case KIND_PROFILE:
+              const profile = this.parser.parseProfile(e);
+              return this.parser
+                .parseNostrLinks(profile.profile?.about || "")
+                .map((l) => l.split("nostr:")[1]);
+          }
+          return [];
+        })
+        .flat();
+      console.log("nostr links", events, links);
 
-    links.forEach((id) => {
-      try {
-        const { type, data } = nip19.decode(id);
-        switch (type) {
-          case "npub":
-            pubkeys.push(data);
-            break;
-          case "nprofile":
-            pubkeys.push(data.pubkey);
-            relays.push(...(data.relays || []));
-            break;
-          case "naddr":
-            addrs.push(data);
-            relays.push(...(data.relays || []));
-            break;
-          case "nevent":
-            ids.push(data.id);
-            relays.push(...(data.relays || []));
-            break;
-          case "note":
-            ids.push(data);
-            break;
-        }
-      } catch {}
-    });
+      links.forEach((id) => {
+        try {
+          const { type, data } = nip19.decode(id);
+          switch (type) {
+            case "npub":
+              pubkeys.push(data);
+              break;
+            case "nprofile":
+              pubkeys.push(data.pubkey);
+              relays.push(...(data.relays || []));
+              break;
+            // case "naddr":
+            //   (data.identifier ? preAddrs : reAddrs).push(data);
+            //   relays.push(...(data.relays || []));
+            //   break;
+            // case "nevent":
+            //   ids.push(data.id);
+            //   relays.push(...(data.relays || []));
+            //   break;
+            // case "note":
+            //   ids.push(data);
+            //   break;
+          }
+        } catch {}
+      });
 
-    console.log("linked", { pubkeys, ids, addrs, relays });
+    // console.log("linked", { pubkeys, ids, preAddrs, reAddrs, relays });
+    console.log("linked", { pubkeys, relays });
 
-    // now fetch all linked stuff
-    await this.fetchProfiles(pubkeys, relays);
+    // linked profiles
+    if (pubkeys.length) await this.fetchProfiles(pubkeys, relays);
 
-    // FIXME also ids & addrs
+    // // linked events
+    // const filters = [];
+    // if (ids.length) filters.push({ ids });
+    // if (preAddrs.length)
+    //   filters.push({
+    //     authors: preAddrs.map((a) => a.pubkey),
+    //     kinds: preAddrs.map((a) => a.kind),
+    //     "#d": preAddrs.map((a) => a.identifier),
+    //   });
+    // if (reAddrs.length)
+    //   filters.push({
+    //     authors: preAddrs.map((a) => a.pubkey),
+    //     kinds: preAddrs.map((a) => a.kind),
+    //   });
+
+    // if (filters.length) {
+    //   relays.push(
+    //     ...this.settings.contributor_relays,
+    //     ...this.settings.contributor_inbox_relays
+    //   );
+    //   const linkedEvents = await fetchEvents(this.ndk, filters, relays, 3000);
+    //   console.log("linked events", { filters, linkedEvents });
+
+    //   // fetch authors
+    //   await this.fetchNostrLinks([...linkedEvents], true);
+
+    //   for (const e of linkedEvents) {
+    //     const post = await this.parser.parseEvent(e, this);
+    //     if (!post) continue;
+
+    //     const existing = this.related.find((p) => p.id === post!.id);
+    //     if (existing && existing.event.created_at > post.event.created_at)
+    //       continue;
+
+    //     if (existing)
+    //       this.related.splice(
+    //         this.related.findIndex((r) => r === existing),
+    //         1
+    //       );
+
+    //     console.log("related", post);
+    //     this.related.push(post);
+    //   }
+    // }
   }
 
   private async parseEvents(events: NDKEvent[]) {
@@ -444,17 +491,7 @@ export class NostrStore extends RamStore {
     // parse events and use linked events to
     // format content
     for (const e of events) {
-      let post: Post | undefined;
-      switch (e.kind) {
-        case KIND_LONG_NOTE:
-          post = await this.parser.parseLongNote(e, this);
-          break;
-        case KIND_NOTE:
-          post = await this.parser.parseNote(e, this);
-          break;
-        default:
-          console.warn("invalid kind", e);
-      }
+      const post = await this.parser.parseEvent(e, this);
       if (!post) continue;
 
       // replaceable events
@@ -650,7 +687,7 @@ export class NostrStore extends RamStore {
       );
       console.log("fetched profiles", { events, relays });
       if (events) profiles.push(...events);
-      // NOTE: links in bio are non-standard, and it's 
+      // NOTE: links in bio are non-standard, and it's
       // an infinite loop here (fetching profiles that link
       // to each other won't finish), we should implement
       // a cache for these linked events before we try this

@@ -3,6 +3,7 @@ import { Author } from "./author";
 import { Tag } from "./tag";
 
 export interface Post {
+  type: "post";
   id: string;
   noteId: string;
   npub: string;

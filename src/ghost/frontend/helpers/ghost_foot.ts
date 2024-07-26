@@ -4,7 +4,13 @@
 // Outputs scripts and other assets at the bottom of a Ghost theme
 import { getRenderer } from "../services/renderer";
 import { getPwaCode } from "../../../pwa-code";
-import { CSS_VENOBOX, JS_SEARCH, JS_VENOBOX, JS_ZAP } from "../../..";
+import {
+  CSS_VENOBOX,
+  JS_EMBEDS,
+  JS_SEARCH,
+  JS_VENOBOX,
+  JS_ZAP,
+} from "../../..";
 
 // We use the name ghost_foot to match the helper for consistency:
 export default function ghost_foot(options: any) {
@@ -70,12 +76,21 @@ export default function ghost_foot(options: any) {
         window.location.href = e.detail;
       });
     </script>`);
+
+    foot.push(`
+    <script async src="${JS_EMBEDS}"></script>
+    `);
   }
 
   foot.push(getPwaCode(renderOptions));
 
-  // no need for spinner for server-side rendered pages
-  if (renderOptions.mode !== "ssr" && renderOptions.mode !== "sw") {
+  // no need for spinner for server-side rendered pages,
+  // and for tab-mode for plugins
+  if (
+    renderOptions.mode !== "ssr" &&
+    renderOptions.mode !== "sw" &&
+    renderOptions.mode !== "tab"
+  ) {
     foot.push(`
   <section id="__nostr_site_loading_modal">
     <div class="loader"></div>

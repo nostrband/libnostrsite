@@ -24,6 +24,59 @@ export function isBlossomUrl(u: string) {
   }
 }
 
+export function isImageUrl(u: string) {
+  try {
+    const url = new URL(u);
+    const ext = url.pathname.split(".").pop();
+    switch (ext?.toLowerCase()) {
+      case "png":
+      case "svg":
+      case "jpg":
+      case "jpeg":
+      case "gif":
+      case "tif":
+      case "tiff":
+      case "webp":
+        return true;
+    }
+  } catch {}
+  return false;
+}
+
+export function isVideoUrl(u: string) {
+  try {
+    const url = new URL(u);
+    const ext = url.pathname.split(".").pop();
+    switch (ext?.toLowerCase()) {
+      case "mp4":
+      case "avi":
+      case "mpeg":
+      case "mkv":
+      case "mov":
+      case "webm":
+      case "ogv":
+        return true;
+    }
+  } catch {}
+  return false;
+}
+
+export function isAudioUrl(u: string) {
+  try {
+    const url = new URL(u);
+    const ext = url.pathname.split(".").pop();
+    switch (ext?.toLowerCase()) {
+      case "mp3":
+      case "aac":
+      case "ogg":
+      case "wav":
+      case "weba":
+        return true;
+    }
+  } catch {}
+  return false;
+}
+
 export interface PromiseQueueCb {
   cb: (...args: any[]) => Promise<void>;
   args: any[];
@@ -209,3 +262,4 @@ export function getRelativeUrlPrefix(o: StoreObject) {
   else if (isUser(o)) return "author/";
   else throw new Error("Unknown data type");
 }
+
