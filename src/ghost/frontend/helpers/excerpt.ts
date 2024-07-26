@@ -57,13 +57,13 @@ export default function excerpt(options: any) {
     let code = "";
     for (const url of self.links) {
       if (isVideoUrl(url)) {
-        code = `<div style='position: relative; display: inline-block'>
+        code = `<span style='position: relative; display: inline-block'>
           <video src="${url}" preload="meta" style="max-width: 120px; max-height: 120px; border-radius: 5px; "></video>
           <img 
             style='opacity: 0.4; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);' 
             src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAACw0lEQVR4nO2aPWtUQRSGHxXdjaIkEBMLxWCjP0D8BZIQUAxW+UALK5tgSGNrG2OhKIitCGJho66aXiSKtmbzgYWJiJ9FBDWuemTgCGG5e/funJm9F8kLLyzs3jPz7pw5c86ZCxv4f9EFDAHTQAWoAl+ANaX7PKffud+cADopCErAGDAD/AKkRbpnHgGjaqvt6AAmgbcek2/EFWACKLdLxCCwFFBAPReBgZgC3NJfiSignjd15YOiF3jRRhGifA70hBLRp8stOXFB52DCbg2jkjOXgD2+Iso5uZOkuJlXiL5egMlLHa/6hFgpKPuzinDLN1+ACUsDLmY9NCc9jH8DRoA3bRJzLstqrHgKQQ+w88BqZCHLzTb+mKfh73V29gK3gD8RxYykCZnxNPqjgb3DwJNIQipp9YRPKi5abzTCJuCUp8tKCmvArqQBhwxGf9Ic23X/fA0o5ljSQJeM/05W7AfuBNo/F5MGqBgMOpdsFUeAp0Yh95IMLxgM/sYPm4EzwDvPcatJRj8bhDg3sWAHcEHDeCvjfkgytmZc5hA4ANy1hv0iCDmkXRWTEItriZ4XvujSfkAthGtZM94tHgLcM2eBj55jzoUOvz5CXPh9FiP8ThuNbs0oYB9wO9CBOBU6RckiZJvWEauxU5ROQ9IoTeqDk8DrgAJE87vEpNHhcWAhB4GHgQWI8kHa8o8aDHcECKfSAodjlLr/hLjc6TTwPqIA0VLX7blUTBjaNC8jCxDlOBlQzrnXKxky3swdx4ECTFgS6M6eo7SIawWYuNTxMh4oaeNYCsLZLBu8EboLdK3QixF9xjLYynltWARBT05uNquXTVEuQ2O2QWUdb8S+e++P7GpVnxDri5Km5MsBBbgrifG83oAoaVe84pkg1jSLHbaE1tBwtcFxbWPe13r607qXatznV1qeTmlRtDP4LDZAMfAXFbij5naP28kAAAAASUVORK5CYII="
           >
-        </div>`;
+        </span>`;
       } else if (isAudioUrl(url)) {
         // hmm... maybe a 'music' icon or something?
         // code = `<audio controls src="${url}"></audio>`;
@@ -71,10 +71,10 @@ export default function excerpt(options: any) {
       if (code) break;
     }
     if (code)
-      html = `<div style='float: left; margin: 0 10px 10px 0;'>${code}</div>${html}`;
+      html = `<span style='float: left; margin: 0 10px 10px 0;'>${code}</span>${html}`;
   }
 
-  html = `<np-excerpt id="${self.id}">${html}</np-excerpt>`;
+  html = `<np-excerpt id="${self.id}" style='display: inline'>${html}</np-excerpt>`;
 
   return new SafeString(html);
 }
