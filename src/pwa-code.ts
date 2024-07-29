@@ -59,12 +59,13 @@ export function getPwaCode(options: RenderOptions) {
       ${style}
     `;
 
-    // preview doesn't need tab for now, a) it won't work bcs tab 
-    // read from cache which is empty w/ preview, and b) it's not
-    // really needed to have client-side plugins work in previews
-    // FIXME actually those could work, leave it for later
+    // do whatever needed inside the preview
     case "preview":
       return `
+      <script type="text/javascript" 
+        src="${ssrIndexScriptUrl}" 
+        onload="window.nostrSite.startTab({ preview: true });"
+      ></script>
       ${style}
     `;
 

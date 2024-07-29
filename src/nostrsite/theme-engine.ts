@@ -29,7 +29,7 @@ import {
 } from "./partials/default-partials";
 import merge from "lodash-es/merge";
 import toNumber from "lodash-es/toNumber";
-import { RenderOptions } from ".";
+import { PLAY_FEATURE_BUTTON_PREFIX, RenderOptions } from ".";
 import { templates } from "../ghost/frontend/services/theme-engine/handlebars/template";
 
 const DEFAULT_POSTS_PER_PAGE = 6;
@@ -295,6 +295,9 @@ export class ThemeEngine {
       const slugId = route.param!;
       data.object = await this.store.get(slugId, "posts");
       data.post = data.object as Post;
+      if (data.post && data.post.feature_image?.startsWith(PLAY_FEATURE_BUTTON_PREFIX)) {
+        data.post = { ...data.post, feature_image: null };
+      }
       data.page = {
         show_title_and_feature_image: data.post
           ? data.post.show_title_and_feature_image

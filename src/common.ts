@@ -12,6 +12,8 @@ import NDK, { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { slugify } from "./ghost/helpers/slugify";
 import {
   GlobalNostrSite,
+  PLAY_FEATURE_BUTTON_PREFIX,
+  RenderMode,
   Store,
   fetchEvent,
   fetchOutboxRelays,
@@ -62,7 +64,7 @@ export async function getMetaAddr(): Promise<SiteAddr | undefined> {
   return undefined;
 }
 
-export async function renderCurrentPage(path = "") {
+export async function renderCurrentPage(path = "", options?: { mode: RenderMode }) {
   // read-only thing, but SW should re-fetch
   // it and update HBS object if something changes
   const addr = await getMetaAddr();
@@ -74,6 +76,7 @@ export async function renderCurrentPage(path = "") {
   await renderer.start({
     addr,
     origin: window.location.origin,
+    mode: options?.mode || "iife"
   });
   const t1 = Date.now();
   console.log("renderer created in ", t1 - start);
@@ -375,4 +378,60 @@ export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
   }
 
   return s;
+}
+
+export function startReplacingFeatureImagesWithVideoPreviews() {
+  try {
+    const images = document.querySelectorAll("img");
+    for (const img of images) {
+      const src = img.getAttribute("src");
+      const srcset = img.getAttribute("srcset");
+      if (!src && !srcset) continue;
+      const data = src?.startsWith(PLAY_FEATURE_BUTTON_PREFIX) ? src : srcset;
+      if (!data || !data.startsWith(PLAY_FEATURE_BUTTON_PREFIX)) continue;
+
+      const url = decodeURIComponent(
+        data.split(PLAY_FEATURE_BUTTON_PREFIX)[1].split(";")[0]
+      );
+      if (!url) continue;
+
+      console.log("injecting video preview", url);
+
+      let html = `
+        <video src="${url}" 
+          preload="meta" 
+          style="width: 100%; height: 100%"
+        ></video>
+        <img 
+          style='opacity: 0.4; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px' 
+          src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAACw0lEQVR4nO2aPWtUQRSGHxXdjaIkEBMLxWCjP0D8BZIQUAxW+UALK5tgSGNrG2OhKIitCGJho66aXiSKtmbzgYWJiJ9FBDWuemTgCGG5e/funJm9F8kLLyzs3jPz7pw5c86ZCxv4f9EFDAHTQAWoAl+ANaX7PKffud+cADopCErAGDAD/AKkRbpnHgGjaqvt6AAmgbcek2/EFWACKLdLxCCwFFBAPReBgZgC3NJfiSignjd15YOiF3jRRhGifA70hBLRp8stOXFB52DCbg2jkjOXgD2+Iso5uZOkuJlXiL5egMlLHa/6hFgpKPuzinDLN1+ACUsDLmY9NCc9jH8DRoA3bRJzLstqrHgKQQ+w88BqZCHLzTb+mKfh73V29gK3gD8RxYykCZnxNPqjgb3DwJNIQipp9YRPKi5abzTCJuCUp8tKCmvArqQBhwxGf9Ic23X/fA0o5ljSQJeM/05W7AfuBNo/F5MGqBgMOpdsFUeAp0Yh95IMLxgM/sYPm4EzwDvPcatJRj8bhDg3sWAHcEHDeCvjfkgytmZc5hA4ANy1hv0iCDmkXRWTEItriZ4XvujSfkAthGtZM94tHgLcM2eBj55jzoUOvz5CXPh9FiP8ThuNbs0oYB9wO9CBOBU6RckiZJvWEauxU5ROQ9IoTeqDk8DrgAJE87vEpNHhcWAhB4GHgQWI8kHa8o8aDHcECKfSAodjlLr/hLjc6TTwPqIA0VLX7blUTBjaNC8jCxDlOBlQzrnXKxky3swdx4ECTFgS6M6eo7SIawWYuNTxMh4oaeNYCsLZLBu8EboLdK3QixF9xjLYynltWARBT05uNquXTVEuQ2O2QWUdb8S+e++P7GpVnxDri5Km5MsBBbgrifG83oAoaVe84pkg1jSLHbaE1tBwtcFxbWPe13r607qXatznV1qeTmlRtDP4LDZAMfAXFbij5naP28kAAAAASUVORK5CYII="
+        >
+      `;
+
+      // copy styles
+      const div = document.createElement("div");
+      div.innerHTML = html;
+
+      const styles = window.getComputedStyle(img);
+      let cssText = styles.cssText;
+      if (!cssText) {
+        cssText = Object.values(styles).reduce(
+          (css, propertyName) =>
+            `${css}${propertyName}:${styles.getPropertyValue(propertyName)};`
+        );
+      }
+      div.style.cssText = cssText;
+      // effects
+      div.style.opacity = "1";
+      div.style.visibility = "visible"; 
+      img.parentNode!.insertBefore(div, img);
+      img.remove();
+    }
+  } catch (e) {
+    console.log("failed injecting video previews", e);
+  }
+
+  // repeat every 500 ms to make sure
+  // posts loaded by pagination are handled too
+  setTimeout(startReplacingFeatureImagesWithVideoPreviews, 500);
 }

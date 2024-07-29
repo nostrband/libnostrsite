@@ -20,6 +20,17 @@ import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
 
 const NJUMP_DOMAIN = "njump.me";
 
+// we want to show video preview in place of feature_image,
+// for that we inject this empty feature_image and then
+// in the tab replace these <img> elements with <video> elements
+// with all styles copied and <play> button overlaid. but
+// we also clear this feature_image thing on a post page bcs 
+// there is no need for preview there - a player is embedded 
+// in the post page.
+export const PLAY_FEATURE_BUTTON_PREFIX = "data:image/gif+np-feature-video:";
+// smallest possible transparent gif: https://stackoverflow.com/a/9967193
+const PLAY_FEATURE_BUTTON = PLAY_FEATURE_BUTTON_PREFIX+"<video_url>;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
 }
@@ -295,6 +306,8 @@ export class NostrParser {
       authors: [],
       markdown: e.content || "",
       images: [],
+      videos: [],
+      audios: [],
       links: this.parseTextLinks(e.content),
       nostrLinks: this.parseNostrLinks(e.content),
       event: e.rawEvent(),
@@ -318,10 +331,14 @@ export class NostrParser {
 
     post.markdown = await this.replaceNostrLinks(post, post.markdown!);
 
-    // images from links & oembeds
+    // images from links 
     post.images = this.parseImages(post);
+    post.videos = this.parseVideos(post);
+
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
+    if (!post.feature_image && post.videos.length)
+      post.feature_image = PLAY_FEATURE_BUTTON.replace("<video_url>", encodeURIComponent(post.videos[0]));
 
     // replace media links and oembeds
     this.embedLinks(post);
@@ -380,6 +397,8 @@ export class NostrParser {
       authors: [],
       markdown: "",
       images: [],
+      videos: [],
+      audios: [],
       links: this.parseTextLinks(e.content),
       nostrLinks: this.parseNostrLinks(e.content),
       event: e.rawEvent(),
@@ -389,12 +408,15 @@ export class NostrParser {
     // oembed from built-in providers
     //    await this.fetchOembeds(post);
 
-    // parse images, set feature image
+    // parse media
     post.images = this.parseImages(post);
+    post.videos = this.parseVideos(post);
 
     // set feature image
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
+    if (!post.feature_image && post.videos.length)
+      post.feature_image = PLAY_FEATURE_BUTTON.replace("<video_url>", encodeURIComponent(post.videos[0]));
 
     const includeFeatureImageInPost =
       this.getConf("include_feature_image") === "true";
@@ -795,5 +817,16 @@ export class NostrParser {
 
     // unique
     return [...new Set(images)];
+  }
+
+  private parseVideos(post: Post): string[] {
+    const videos: string[] = [];
+
+    // extract from string content
+    const urls = this.parseTextLinks(post.event.content);
+    videos.push(...urls.filter((u) => isVideoUrl(u)));
+
+    // unique
+    return [...new Set(videos)];
   }
 }

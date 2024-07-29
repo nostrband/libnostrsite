@@ -55,6 +55,12 @@ export interface Post {
   // all image urls
   images: string[];
 
+  // all video urls
+  videos: string[];
+
+  // all audio urls
+  audios: string[];
+
   // ghost's settings, default=true
   show_title_and_feature_image: boolean;
 
