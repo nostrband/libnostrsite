@@ -31,6 +31,7 @@ import merge from "lodash-es/merge";
 import toNumber from "lodash-es/toNumber";
 import { PLAY_FEATURE_BUTTON_PREFIX, RenderOptions } from ".";
 import { templates } from "../ghost/frontend/services/theme-engine/handlebars/template";
+import { DateTime } from "luxon";
 
 const DEFAULT_POSTS_PER_PAGE = 6;
 
@@ -92,7 +93,7 @@ export class ThemeEngine {
     const options = this.hbs.getTemplateOptions();
     const localTemplateOptions = this.hbs.getLocalTemplateOptions(locals);
     // attach options etc to 'locals'
-    locals = merge(locals, localTemplateOptions, options)
+    locals = merge(locals, localTemplateOptions, options);
 
     console.log("renderPartial", { template, self, locals });
     return templates.execute(template, self, locals, this.hbs);
@@ -295,7 +296,10 @@ export class ThemeEngine {
       const slugId = route.param!;
       data.object = await this.store.get(slugId, "posts");
       data.post = data.object as Post;
-      if (data.post && data.post.feature_image?.startsWith(PLAY_FEATURE_BUTTON_PREFIX)) {
+      if (
+        data.post &&
+        data.post.feature_image?.startsWith(PLAY_FEATURE_BUTTON_PREFIX)
+      ) {
         data.post = { ...data.post, feature_image: null };
       }
       data.page = {
@@ -375,7 +379,9 @@ export class ThemeEngine {
     return { result, context };
   }
 
-  public async getSiteMap() {
+  public async getSiteMap(limit?: number) {
+    limit = limit || 1000;
+
     const map: string[] = [];
     const base = this.settings!.url || "/";
     const prefix = base.substring(0, base.length - 1);
@@ -385,13 +391,13 @@ export class ThemeEngine {
     };
     put("/");
 
-    const posts = (await this.store.list({ type: "posts", limit: 1000 })).posts;
+    const posts = (await this.store.list({ type: "posts", limit })).posts;
 
     // FIXME shouldn't this live in router?
     // OTOH, object.url is filled in parser, so it's already a mess...
-    const limit =
+    const pageLimit =
       ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
-    for (let i = 1; i <= posts!.length / limit; i++) put(`/page/${i}`);
+    for (let i = 1; i <= posts!.length / pageLimit; i++) put(`/page/${i}`);
 
     for (const p of posts!) {
       put(p.url);
@@ -406,5 +412,65 @@ export class ThemeEngine {
     }
 
     return map;
+  }
+
+  public async getRss(limit: number = 20) {
+    if (!this.settings) return "";
+    const url = this.settings.origin + this.settings.url;
+    const prefix = url.substring(0, url.length - 1);
+    const link = (p: string) => {
+      return `${prefix}${p}`;
+    };
+
+    const pubDate = (published_at: string | null | undefined) => {
+      if (!published_at) return "";
+      return DateTime.fromMillis(Date.parse(published_at))
+        .setZone("GMT")
+        .toFormat("ccc, dd LLL yyyy TTT")
+        .replace("UTC", "GMT");
+    };
+
+    const posts = (await this.store.list({ type: "posts", limit })).posts;
+    let rss = `<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+      <channel>
+        <title>${this.settings!.title}</title>
+        <description>${this.settings!.description}</description>
+        <link>${url}</link>
+        <atom:link href="${url}feed.xml" rel="self" type="application/rss+xml"/>
+        <pubDate>${pubDate(posts?.[0].published_at)}</pubDate>
+    `;
+    const image = this.settings!.logo || this.settings!.icon;
+    if (image) {
+      rss += `
+      <image>
+        <title>${this.settings!.title}</title>
+        <link>${url}</link>
+        <url>${image}</url>
+      </image>`;
+    }
+
+    for (const p of posts!) {
+      const item = `
+      <item>
+      <title>${p.title}</title>
+      <description>${p.excerpt}</description>
+      <pubDate>${pubDate(p.published_at)}</pubDate>
+      <link>${link(p.url)}</link>
+      <comments>${link(p.url)}</comments>
+      <guid isPermaLink=\"false\">${p.id}</guid>
+      <category>${p.primary_tag ? p.primary_tag.name : ""}</category>
+      <noteId>${p.id}</noteId>
+      <npub>${p.npub}</npub>
+      </item>
+      `;
+      rss += item;
+    }
+
+    rss += `
+      </channel>
+      </rss>
+    `;
+
+    return rss;
   }
 }

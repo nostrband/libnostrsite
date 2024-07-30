@@ -469,7 +469,11 @@ export class NostrSiteRenderer implements Renderer {
     //await this.cacheAll(cache, assets, 5);
   }
 
-  public async getSiteMap() {
-    return this.engine!.getSiteMap();
+  public async getSiteMap(limit?: number) {
+    return this.engine!.getSiteMap(limit);
+  }
+
+  public async getRss() {
+    return this.engine!.getRss();
   }
 }

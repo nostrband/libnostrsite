@@ -158,7 +158,7 @@ export class NostrStore extends RamStore {
     // ensure relays are known
     await this.fetchRelays();
 
-    const promises: Promise<void>[] = [];
+    const promises: Promise<number | undefined>[] = [];
 
     if (this.settings.include_all || !!this.settings.include_tags?.length) {
       promises.push(this.fetchByFilter(since, until, sub));
@@ -170,9 +170,23 @@ export class NostrStore extends RamStore {
     //   promises.push(this.fetchManual(since, until, sub));
     // }
 
-    await Promise.all(promises);
+    const results = await Promise.all(promises);
+    const newUntil = results.reduce(
+      (pv, cv) => (!cv ? pv : pv ? Math.min(cv, pv) : cv),
+      until
+    );
 
-    console.warn(Date.now(), "fetched objects", since, until, sub);
+    console.warn(
+      Date.now(),
+      "fetched objects",
+      since,
+      until,
+      "=>",
+      newUntil,
+      sub
+    );
+
+    return newUntil;
   }
 
   private async loadIife() {
@@ -193,23 +207,27 @@ export class NostrStore extends RamStore {
     console.log(Date.now(), "start sync, max", max);
     let until = 0;
     do {
-      const was_count = this.posts.length;
-      await this.fetchObjects(since, until);
+      // const was_count = this.posts.length;
+      const newUntil = await this.fetchObjects(since, until);
 
-      if (this.posts.length === was_count) {
+      // if (this.posts.length === was_count) {
+      //   console.log("stop sync, end");
+      //   break;
+      // }
+
+      // const newUntil = this.posts
+      //   .map((p) => p.event.created_at)
+      //   .reduce((last, current) => Math.min(last, current), until);
+      console.log("newUntil", newUntil);
+      if (!newUntil) {
         console.log("stop sync, end");
         break;
       }
-
-      const newUntil = this.posts
-        .map((p) => p.event.created_at)
-        .reduce((last, current) => Math.min(last, current), until);
       if (newUntil === until) {
         console.log("stop sync, same cursor", newUntil);
         break;
       }
-      console.log("newUntil", until, newUntil);
-      until = newUntil;
+      until = newUntil!;
     } while (this.posts.length < max);
 
     console.log(Date.now(), "done sync, posts", this.posts.length);
@@ -385,51 +403,51 @@ export class NostrStore extends RamStore {
       // }
     }
 
-      // parse content links (those might not match tags)
-      const links = events
-        .map((e) => {
-          switch (e.kind) {
-            case KIND_LONG_NOTE:
-            case KIND_NOTE:
-              return this.parser
-                .parseNostrLinks(e.content)
-                .map((l) => l.split("nostr:")[1]);
-            case KIND_PROFILE:
-              const profile = this.parser.parseProfile(e);
-              return this.parser
-                .parseNostrLinks(profile.profile?.about || "")
-                .map((l) => l.split("nostr:")[1]);
-          }
-          return [];
-        })
-        .flat();
-      console.log("nostr links", events, links);
+    // parse content links (those might not match tags)
+    const links = events
+      .map((e) => {
+        switch (e.kind) {
+          case KIND_LONG_NOTE:
+          case KIND_NOTE:
+            return this.parser
+              .parseNostrLinks(e.content)
+              .map((l) => l.split("nostr:")[1]);
+          case KIND_PROFILE:
+            const profile = this.parser.parseProfile(e);
+            return this.parser
+              .parseNostrLinks(profile.profile?.about || "")
+              .map((l) => l.split("nostr:")[1]);
+        }
+        return [];
+      })
+      .flat();
+    console.log("nostr links", events, links);
 
-      links.forEach((id) => {
-        try {
-          const { type, data } = nip19.decode(id);
-          switch (type) {
-            case "npub":
-              pubkeys.push(data);
-              break;
-            case "nprofile":
-              pubkeys.push(data.pubkey);
-              relays.push(...(data.relays || []));
-              break;
-            // case "naddr":
-            //   (data.identifier ? preAddrs : reAddrs).push(data);
-            //   relays.push(...(data.relays || []));
-            //   break;
-            // case "nevent":
-            //   ids.push(data.id);
-            //   relays.push(...(data.relays || []));
-            //   break;
-            // case "note":
-            //   ids.push(data);
-            //   break;
-          }
-        } catch {}
-      });
+    links.forEach((id) => {
+      try {
+        const { type, data } = nip19.decode(id);
+        switch (type) {
+          case "npub":
+            pubkeys.push(data);
+            break;
+          case "nprofile":
+            pubkeys.push(data.pubkey);
+            relays.push(...(data.relays || []));
+            break;
+          // case "naddr":
+          //   (data.identifier ? preAddrs : reAddrs).push(data);
+          //   relays.push(...(data.relays || []));
+          //   break;
+          // case "nevent":
+          //   ids.push(data.id);
+          //   relays.push(...(data.relays || []));
+          //   break;
+          // case "note":
+          //   ids.push(data);
+          //   break;
+        }
+      } catch {}
+    });
 
     // console.log("linked", { pubkeys, ids, preAddrs, reAddrs, relays });
     console.log("linked", { pubkeys, relays });
@@ -779,10 +797,10 @@ export class NostrStore extends RamStore {
     const filters = this.createTagFilters(since, until);
     if (!filters.length) {
       console.warn("Empty filters for 'include' tags");
-      return;
+      return until;
     }
 
-    if (this.isOffline()) return;
+    if (this.isOffline()) return until;
 
     const relays = [
       ...(this.settings.contributor_relays || this.settings.admin_relays),
@@ -801,8 +819,9 @@ export class NostrStore extends RamStore {
     const events: NDKEvent[] = [];
 
     const queue = new PromiseQueue();
+    let newUntil = until;
 
-    return new Promise<void>((ok) => {
+    return new Promise<number | undefined>((ok) => {
       const timeoutMs =
         subscribe || // it's forward looking, should be fast
         this.mode === "iife" || // asap
@@ -824,13 +843,14 @@ export class NostrStore extends RamStore {
         console.log("events", { events, filters, relays });
         await this.storeEvents(events);
         await this.parseEvents(events);
-        ok();
+        ok(newUntil);
 
         // consumed
         events.length = 0;
       };
 
       const onEvent = async (e: NDKEvent) => {
+        if (!newUntil || e.created_at! < newUntil) newUntil = e.created_at;
         if (eose && subscribe) {
           console.log("new event", e);
           if (this.matchObject(e)) {
