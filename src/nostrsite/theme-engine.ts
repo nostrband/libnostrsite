@@ -399,6 +399,10 @@ export class ThemeEngine {
     return !!this.router!.route(path).hasRss;
   }
 
+  public isRss(path: string) {
+    return !!this.router!.route(path).context.includes("rss");
+  }
+
   public async getSiteMap(limit?: number) {
     limit = limit || 1000;
 

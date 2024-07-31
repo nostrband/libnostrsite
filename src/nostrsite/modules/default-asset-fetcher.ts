@@ -1,3 +1,4 @@
+import { BLOSSOM_FALLBACKS } from "..";
 import {
   DEFAULT_PARTIALS,
   DEFAULT_PARTIALS_DIR_NAME,
@@ -31,9 +32,7 @@ export class DefaultAssetFetcher implements AssetFetcher {
       for (const e of theme.entries) {
         if (!e.path.endsWith(".hbs")) continue;
         if (this.cache.get(e.url)) continue;
-        promises.push(
-          this.fetchCachedExt(e.url)
-        );
+        promises.push(this.fetchCachedExt(e.url));
       }
     }
   }
@@ -46,7 +45,7 @@ export class DefaultAssetFetcher implements AssetFetcher {
     if (dir === DEFAULT_PARTIALS_DIR_NAME) return file;
 
     // cut 2 slashes and query string
-    const path = file.substring(dir.length + 2).split('?')[0];
+    const path = file.substring(dir.length + 2).split("?")[0];
     const theme = this.themes.find((t) => t.id === dir);
     console.debug("fetch from theme", dir, path, file, theme);
 
@@ -80,17 +79,33 @@ export class DefaultAssetFetcher implements AssetFetcher {
       if (r !== undefined) {
         console.debug("fetched from external cache", url);
         this.cache.set(url, r);
-        return r;  
+        return r;
       }
     }
 
-    return fetch(url)
-    .then((d) => d.text())
-    .then((r) => {
-      console.debug("fetched from network", url);
-      this.cache.set(url, r);
-      return r;
-    });
+    const u = new URL(url);
+
+    // try several servers - fallbacks have discovery
+    // enabled and might find the file even if it's
+    // never been uploaded to them
+    const urls = [
+      url,
+      ...BLOSSOM_FALLBACKS.map((s) => s + u.pathname + u.search),
+    ];
+
+    for (const su of urls) {
+      try {
+        const r = await fetch(su);
+        const d = await r.text();
+        console.debug("fetched from network", url, su);
+        this.cache.set(url, d);
+        return d;
+      } catch (e) {
+        console.warn("failed to fetched from network", su, e);
+      }
+    }
+
+    throw new Error("Failed to fetch asset " + url);
   }
 
   private async fetchCached(url: string) {

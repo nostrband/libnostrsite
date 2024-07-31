@@ -474,6 +474,10 @@ export class NostrSiteRenderer implements Renderer {
     return this.engine!.getSiteMap(limit);
   }
 
+  public isRss(path: string) {
+    return this.engine!.isRss(path);
+  }
+
   public hasRss(path: string) {
     return this.engine!.hasRss(path);
   }

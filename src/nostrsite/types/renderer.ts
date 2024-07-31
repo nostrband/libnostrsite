@@ -40,4 +40,6 @@ export interface Renderer {
   renderPartial(template: string, self: any, data: any): Promise<string>;
   onUpdate(): Promise<void>;
   getSiteMap(): Promise<string[]>;
+  isRss(path: string): boolean;
+  hasRss(path: string): boolean;
 }

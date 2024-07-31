@@ -36,6 +36,11 @@ export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.9/dist/index.j
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.1.js";
 
+export const BLOSSOM_FALLBACKS = [
+  "https://blossom.npubpro.com",
+  "https://cdn.hzrd149.com"
+];
+
 export const PRECACHE_ENTRIES = [
   // these are static and don't need revision info
   JS_JQUERY,
