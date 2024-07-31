@@ -32,6 +32,7 @@ import {
   fetchEvent,
   fetchEvents,
   fetchRelays,
+  profileId,
   tags,
 } from "..";
 
@@ -586,7 +587,7 @@ export class NostrStore extends RamStore {
       // got author already?
       if (post.primary_author) continue;
 
-      const id = this.parser.getAuthorId(post.event);
+      const id = profileId(post.event);
       let author = this.authors.find((a) => a.id === id);
       if (!author) {
         // create new author from profile

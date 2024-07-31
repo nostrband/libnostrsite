@@ -54,7 +54,8 @@ export class RamStore implements Store {
       return (
         this.posts.find((p) => p.id === slugId || p.slug === slugId) ||
         this.tags.find((p) => p.id === slugId || p.slug === slugId) ||
-        this.authors.find((p) => p.id === slugId || p.slug === slugId)
+        this.authors.find((p) => p.id === slugId || p.slug === slugId) ||
+        this.profiles.find((p) => p.id === slugId || p.slug === slugId)
       );
     }
 

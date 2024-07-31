@@ -43,3 +43,11 @@ export function eventId(e: NDKEvent | NostrEvent) {
     return nip19.noteEncode(e.id!);
   }
 }
+
+export function profileId(e: NDKEvent | NostrEvent | string) {
+  if (typeof e === "string")
+    return nip19.npubEncode(e);
+  else
+    return nip19.npubEncode(e.pubkey);
+}
+

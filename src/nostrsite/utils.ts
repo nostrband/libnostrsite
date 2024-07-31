@@ -263,3 +263,35 @@ export function getRelativeUrlPrefix(o: StoreObject) {
   else throw new Error("Unknown data type");
 }
 
+export function getUrlMediaMime(u: string) {
+  try {
+    const url = new URL(u);
+    const ext = url.pathname.split(".").pop();
+    switch (ext?.toLowerCase()) {
+      case "mp4": return "video/mp4";
+      case "avi": return "video/x-msvideo";
+      case "mpeg": return "video/mpeg";
+      case "mkv": return "video/x-matroska";
+      case "mov": return "video/quicktime";
+      case "webm": return "video/webm";
+      case "ogv": return "video/ogg";
+
+      case "png": return "image/png";
+      case "svg": return "image/svg+xml";
+      case "jpg": return "image/jpeg";
+      case "jpeg": return "image/jpeg";
+      case "gif": return "image/gif";
+      case "tif": return "image/tiff";
+      case "tiff": return "image/tiff";
+      case "webp": return "image/webp";
+
+      case "mp3": return "audio/mpeg";
+      case "aac": return "audio/aac";
+      case "ogg": return "audio/ogg";
+      case "oga": return "audio/ogg";
+      case "wav": return "audio/wav"
+      case "weba": return "audio/webm";
+    }
+  } catch {}
+  return "";
+}

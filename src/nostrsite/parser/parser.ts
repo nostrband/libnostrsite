@@ -1,6 +1,6 @@
-import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
+import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { Site } from "../types/site";
-import { eventId, tags, tv } from "./utils";
+import { eventId, profileId, tags, tv } from "./utils";
 import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { marked } from "marked";
@@ -49,10 +49,6 @@ export class NostrParser {
   public setSite(site: Site) {
     // this.site = site;
     this.config = site.config;
-  }
-
-  public getAuthorId(e: NDKEvent | NostrEvent) {
-    return nip19.npubEncode(e.pubkey);
   }
 
   public parseSite(addr: SiteAddr, event: NDKEvent): Site {
@@ -691,7 +687,7 @@ export class NostrParser {
     }
 
     // done
-    post.html = dom.html();
+    post.html = dom('body').html();
   }
 
   private getConf(name: string): string | undefined {
@@ -704,7 +700,7 @@ export class NostrParser {
   }
 
   public parseProfile(e: NDKEvent): Profile {
-    const id = this.getAuthorId(e);
+    const id = profileId(e);
     return {
       id,
       slug: id,

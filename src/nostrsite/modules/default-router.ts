@@ -24,12 +24,15 @@ export class DefaultRouter implements Router {
     const param = (prefix: string) => {
       return path.split(`/${prefix}/`)[1].split("/")[0].split("?")[0];
     };
+    const tail = path.split("?")[0];
+    const isRss = tail.endsWith("/rss") || tail.endsWith("/rss/");
 
     const route: Route = {
       path,
+      pathHtml: path,
       context: [],
     };
-    if (match("/")) {
+    if (match("/") || match("/rss/")) {
       route.context = ["home", "index"];
     } else if (match("/page/*")) {
       route.context = ["paged", "index"];
@@ -49,6 +52,17 @@ export class DefaultRouter implements Router {
       route.context = ["error"];
     }
 
+    // rss only on homepage, tag or author
+    route.hasRss =
+      route.context.includes("home") ||
+      route.context.includes("tag") ||
+      route.context.includes("author");
+
+    if (isRss && route.hasRss) {
+      route.context.push("rss");
+      route.pathHtml = route.path.split("/rss")[0];
+    }
+
     if (
       !route.context.includes("home") &&
       !route.context.includes("error") &&
@@ -61,4 +75,3 @@ export class DefaultRouter implements Router {
     return route;
   }
 }
-

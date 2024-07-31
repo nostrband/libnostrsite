@@ -29,11 +29,18 @@ import {
 } from "./partials/default-partials";
 import merge from "lodash-es/merge";
 import toNumber from "lodash-es/toNumber";
-import { PLAY_FEATURE_BUTTON_PREFIX, RenderOptions } from ".";
+import {
+  PLAY_FEATURE_BUTTON_PREFIX,
+  Profile,
+  RenderOptions,
+  getUrlMediaMime,
+  profileId,
+} from ".";
 import { templates } from "../ghost/frontend/services/theme-engine/handlebars/template";
 import { DateTime } from "luxon";
 
 const DEFAULT_POSTS_PER_PAGE = 6;
+const POSTS_PER_RSS = 20;
 
 function ensureNumber(v: any | undefined): number | undefined {
   if (v === undefined) return undefined;
@@ -271,8 +278,9 @@ export class ThemeEngine {
   }
 
   private async loadContextData(route: Route): Promise<Context> {
-    const limit =
-      ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
+    const limit = route.context.includes("rss")
+      ? POSTS_PER_RSS
+      : ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
 
     const data: Context = {
       context: route.context,
@@ -356,7 +364,8 @@ export class ThemeEngine {
   }
 
   public async render(
-    path: string
+    path: string,
+    allowRss: boolean
   ): Promise<{ result: string; context: Context }> {
     const start = Date.now();
     console.log("render", path);
@@ -368,15 +377,25 @@ export class ThemeEngine {
     // due to 404 Not Found errors etc
     const context = await this.loadContextData(route);
 
-    const template = this.templater!.template(context);
+    let result = "";
+    if (allowRss && context.context.includes("rss") && context.posts) {
+      // rss
+      result = await this.renderRss(route, context.posts);
+    } else {
+      // html
+      const template = this.templater!.template(context);
 
-    console.log("context data", { route, context, template });
+      console.log("context data", { route, context, template });
 
-    const result = await this.renderTemplate(template, context);
-
+      result = await this.renderTemplate(template, context);
+    }
     console.log("rendered", path, "in", Date.now() - start, "ms");
 
     return { result, context };
+  }
+
+  public hasRss(path: string) {
+    return !!this.router!.route(path).hasRss;
   }
 
   public async getSiteMap(limit?: number) {
@@ -414,7 +433,7 @@ export class ThemeEngine {
     return map;
   }
 
-  public async getRss(limit: number = 20) {
+  private async renderRss(route: Route, posts: Post[]) {
     if (!this.settings) return "";
     const url = this.settings.origin + this.settings.url;
     const prefix = url.substring(0, url.length - 1);
@@ -430,37 +449,106 @@ export class ThemeEngine {
         .replace("UTC", "GMT");
     };
 
-    const posts = (await this.store.list({ type: "posts", limit })).posts;
-    let rss = `<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+    const getName = async (pubkey: string) => {
+      const npub = profileId(pubkey);
+      const profile = (await this.store.get(npub, "profiles")) as
+        | Profile
+        | undefined;
+      return profile && profile.profile
+        ? profile.profile.display_name || profile.profile.name
+        : npub;
+    };
+
+    const admin = await getName(this.settings.admin_pubkey);
+    const feedUrl = prefix + route.path;
+    const htmlUrl = prefix + route.pathHtml;
+    let rss = `<rss
+      xmlns:atom="http://www.w3.org/2005/Atom"
+      xmlns:media="http://search.yahoo.com/mrss/"
+      xmlns:content="http://purl.org/rss/1.0/modules/content/"
+      xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+      xmlns:dc="http://purl.org/dc/elements/1.1/"
+      version="2.0"
+    >
       <channel>
-        <title>${this.settings!.title}</title>
-        <description>${this.settings!.description}</description>
-        <link>${url}</link>
-        <atom:link href="${url}feed.xml" rel="self" type="application/rss+xml"/>
-        <pubDate>${pubDate(posts?.[0].published_at)}</pubDate>
-    `;
+        <title><![CDATA[${this.settings!.title}]]></title>
+        <description><![CDATA[${this.settings!.description}]]></description>
+        <link>${htmlUrl}</link>
+        <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
+        <itunes:new-feed-url>${feedUrl}</itunes:new-feed-url>
+        <itunes:author><![CDATA[${admin}]]></itunes:author>
+        <itunes:subtitle><![CDATA[${
+          this.settings!.description
+        }]]></itunes:subtitle>
+        <itunes:type>episodic</itunes:type>
+        <itunes:owner>
+          <itunes:name><![CDATA[${admin}]]></itunes:name>
+          <itunes:email><![CDATA[${admin}]]></itunes:email>
+        </itunes:owner>
+            `;
+    if (posts && posts.length > 0)
+      rss += `<pubDate>${pubDate(posts[0].published_at)}</pubDate>`;
+
     const image = this.settings!.logo || this.settings!.icon;
     if (image) {
       rss += `
+      <itunes:image href="${image}" />
       <image>
-        <title>${this.settings!.title}</title>
-        <link>${url}</link>
+        <title><![CDATA[${this.settings!.title}]]></title>
+        <link>${htmlUrl}</link>
         <url>${image}</url>
       </image>`;
     }
 
     for (const p of posts!) {
+      let payload = undefined;
+      let medium = "";
+      if (p.videos.length) {
+        payload = p.videos[0];
+        medium = "video";
+      } else if (p.audios.length) {
+        payload = p.audios[0];
+        medium = "audio";
+      } else if (p.images.length) {
+        payload = p.images[0];
+        medium = "image";
+      }
+
+      const author = await getName(p.event.pubkey);
+
       const item = `
       <item>
-      <title>${p.title}</title>
-      <description>${p.excerpt}</description>
+      <title><![CDATA[${p.title}]]></title>
+      ${
+        p.title !== p.excerpt
+          ? `<description><![CDATA[${p.excerpt}]]></description>
+             <itunes:subtitle><![CDATA[${p.excerpt}]]></itunes:subtitle>`
+          : ""
+      }
       <pubDate>${pubDate(p.published_at)}</pubDate>
       <link>${link(p.url)}</link>
       <comments>${link(p.url)}</comments>
       <guid isPermaLink=\"false\">${p.id}</guid>
       <category>${p.primary_tag ? p.primary_tag.name : ""}</category>
+      ${
+        payload
+          ? `
+        <media:content url="${payload}" medium="${medium}"/>
+        <enclosure 
+          url="${payload}" length="0" 
+          type="${getUrlMediaMime(payload)}" 
+        />`
+          : ""
+      }
       <noteId>${p.id}</noteId>
       <npub>${p.npub}</npub>
+      <dc:creator><![CDATA[${author}]]></dc:creator>
+      <content:encoded><![CDATA[${p.html}]]></content:encoded>
+      <itunes:author><![CDATA[${author}]]></itunes:author>
+      <itunes:summary><![CDATA[${p.html}]]></itunes:summary>
+      ${
+        payload && medium === "image" ? `<itunes:image href="${payload}"/>` : ""
+      }
       </item>
       `;
       rss += item;

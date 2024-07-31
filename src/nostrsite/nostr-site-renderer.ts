@@ -377,7 +377,8 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   public async render(path: string) {
-    const r = await this.engine!.render(path);
+    const allowRss = this.options!.mode === "ssr";
+    const r = await this.engine!.render(path, allowRss);
     this.precacheUrls(r.context.mediaUrls);
     return r;
   }
@@ -473,7 +474,7 @@ export class NostrSiteRenderer implements Renderer {
     return this.engine!.getSiteMap(limit);
   }
 
-  public async getRss() {
-    return this.engine!.getRss();
+  public hasRss(path: string) {
+    return this.engine!.hasRss(path);
   }
 }

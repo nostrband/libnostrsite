@@ -17,6 +17,7 @@ import {
   JS_ZAPTHREADS,
 } from "../../../nostrsite/consts";
 import { nip19 } from "nostr-tools";
+import { PLAY_FEATURE_BUTTON_PREFIX } from "../../..";
 
 function getMime(url: string) {
   const path = new URL(url).pathname;
@@ -297,7 +298,7 @@ export default async function ghost_head(options: any) {
       )}" />
     `);
     }
-    if (metaImage) {
+    if (metaImage && !metaImage.includes(PLAY_FEATURE_BUTTON_PREFIX)) {
       head.push(`
       <meta property="og:image" content="${escapeExpression(metaImage)}" />
       <meta name="twitter:image" content="${escapeExpression(metaImage)}" />
