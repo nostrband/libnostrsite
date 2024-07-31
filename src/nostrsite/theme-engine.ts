@@ -285,6 +285,7 @@ export class ThemeEngine {
     const data: Context = {
       context: route.context,
       mediaUrls: [],
+      hasRss: route.hasRss
     };
 
     if (route.context.includes("home")) {

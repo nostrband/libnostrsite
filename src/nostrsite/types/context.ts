@@ -14,4 +14,5 @@ export interface Context {
   author?: Author;
   pagination?: Pagination;
   mediaUrls: string[];
+  hasRss?: boolean;
 }

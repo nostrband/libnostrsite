@@ -31,7 +31,9 @@ export class UrlService {
       (absolute ? this.origin : "") +
       (withSubdirectory ? this.subDir : "") +
       prefix +
-      (data.slug || data.id)
+      (data.slug || data.id) +
+      // trailing slash assumed by many themes (adding `rss/` etc)
+      "/" 
     );
   }
 

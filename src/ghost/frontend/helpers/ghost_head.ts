@@ -337,14 +337,16 @@ export default async function ghost_head(options: any) {
     // site id for pwa code to function and for crawlers to see
     head.push(`<meta name="nostr:site" content="${site.naddr}" />`);
     if (root.author) {
-      head.push(`<meta name="author" content="${root.author.name || root.author.id}" />`);
+      head.push(
+        `<meta name="author" content="${root.author.name || root.author.id}" />`
+      );
       head.push(`<meta name="nostr:author" content="${root.author.id}" />`);
       head.push(`<meta name="nostr:id" content="${root.author.id}" />`);
     } else if (object) {
       const npub = nip19.npubEncode(object.event?.pubkey || site.admin_pubkey);
-      const author = object.primary_author?.name || object.primary_author?.id || "";
-      if (author)
-        head.push(`<meta name="author" content="${author}" />`);
+      const author =
+        object.primary_author?.name || object.primary_author?.id || "";
+      if (author) head.push(`<meta name="author" content="${author}" />`);
       head.push(`<meta name="nostr:author" content="${npub}" />`);
       if (object.type !== "tag")
         head.push(`<meta name="nostr:id" content="${object.id}" />`);
@@ -536,13 +538,14 @@ export default async function ghost_head(options: any) {
     //     '">'
     // );
 
-    // head.push(
-    //   '<link rel="alternate" type="application/rss+xml" title="' +
-    //     escapeExpression(meta.site.title) +
-    //     '" href="' +
-    //     escapeExpression(meta.rssUrl) +
-    //     '">'
-    // );
+    // rss
+    if (root.hasRss) {
+      head.push(
+        `<link rel="alternate" type="application/rss+xml" title="${escapeExpression(
+          object ? object.title : site.title
+        )}" href="${escapeExpression(canonical + "rss/")}">`
+      );
+    }
 
     // no code injection for amp context!!!
     if (!includes(context, "amp")) {

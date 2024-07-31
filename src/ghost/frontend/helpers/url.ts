@@ -27,7 +27,6 @@ export default function url(options: any) {
     // Send the error not to be blind to these
     const error = new Error(`The url "${outputUrl}" couldn't be escaped correctly`);
     console.error(error);
-
     return new SafeString("");
   }
 
