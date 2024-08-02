@@ -216,9 +216,18 @@ export class ThemeEngine {
       },
     };
 
+    // all templates expect an absolute url w/o trailing slash
+    let url = this.settings.origin + this.settings.url;
+    while (url.endsWith("/")) url = url.substring(0, url.length - 1);
+    console.log("site url", url, this.settings.origin, this.settings.url);
+
+    // init template context
     this.hbs.updateTemplateOptions({
       data: {
-        site: this.settings,
+        site: {
+          ...this.settings,
+          url
+        },
         labs: {},
         config: this.config,
         custom: this.custom,
@@ -233,7 +242,7 @@ export class ThemeEngine {
     // adjust @site.url for http/https based on the incoming request
     const siteData = {
       // we use relative url here!
-      //      url: this.urlUtils!.urlFor("home", { trailingSlash: false }, true),
+      // url: this.urlUtils!.urlFor("home", { trailingSlash: false }, true),
     };
 
     // @TODO: it would be nicer if this was proper middleware somehow...
@@ -476,14 +485,14 @@ export class ThemeEngine {
       version="2.0"
     >
       <channel>
-        <title><![CDATA[${this.settings!.title}]]></title>
-        <description><![CDATA[${this.settings!.description}]]></description>
+        <title><![CDATA[${this.settings!.title || ""}]]></title>
+        <description><![CDATA[${this.settings!.description || ""}]]></description>
         <link>${htmlUrl}</link>
         <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
         <itunes:new-feed-url>${feedUrl}</itunes:new-feed-url>
         <itunes:author><![CDATA[${admin}]]></itunes:author>
         <itunes:subtitle><![CDATA[${
-          this.settings!.description
+          this.settings!.description || ""
         }]]></itunes:subtitle>
         <itunes:type>episodic</itunes:type>
         <itunes:owner>
@@ -499,7 +508,7 @@ export class ThemeEngine {
       rss += `
       <itunes:image href="${image}" />
       <image>
-        <title><![CDATA[${this.settings!.title}]]></title>
+        <title><![CDATA[${this.settings!.title || ""}]]></title>
         <link>${htmlUrl}</link>
         <url>${image}</url>
       </image>`;
@@ -523,11 +532,11 @@ export class ThemeEngine {
 
       const item = `
       <item>
-      <title><![CDATA[${p.title}]]></title>
+      <title><![CDATA[${p.title || ""}]]></title>
       ${
         p.title !== p.excerpt
-          ? `<description><![CDATA[${p.excerpt}]]></description>
-             <itunes:subtitle><![CDATA[${p.excerpt}]]></itunes:subtitle>`
+          ? `<description><![CDATA[${p.excerpt || ""}]]></description>
+             <itunes:subtitle><![CDATA[${p.excerpt || ""}]]></itunes:subtitle>`
           : ""
       }
       <pubDate>${pubDate(p.published_at)}</pubDate>
@@ -548,9 +557,9 @@ export class ThemeEngine {
       <noteId>${p.id}</noteId>
       <npub>${p.npub}</npub>
       <dc:creator><![CDATA[${author}]]></dc:creator>
-      <content:encoded><![CDATA[${p.html}]]></content:encoded>
+      <content:encoded><![CDATA[${p.html || ""}]]></content:encoded>
       <itunes:author><![CDATA[${author}]]></itunes:author>
-      <itunes:summary><![CDATA[${p.html}]]></itunes:summary>
+      <itunes:summary><![CDATA[${p.html || ""}]]></itunes:summary>
       ${
         payload && medium === "image" ? `<itunes:image href="${payload}"/>` : ""
       }

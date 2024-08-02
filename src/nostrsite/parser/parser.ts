@@ -157,7 +157,7 @@ export class NostrParser {
       settings.custom.set(c[1], c[2]);
     }
 
-    if (!settings.url?.endsWith("/")) settings.url += "/";
+    if (!settings.url!.endsWith("/")) settings.url += "/";
 
     settings.comments_enabled =
       settings.config.get("comments_enabled") === "true";

@@ -353,7 +353,7 @@ export default async function ghost_head(options: any) {
     }
 
     // manifest
-    head.push(`<link rel="manifest" href="${site.url}manifest.webmanifest" />`);
+    head.push(`<link rel="manifest" href="${site.url}/manifest.webmanifest" />`);
 
     // jquery is assumed by many themes
     head.push(`
