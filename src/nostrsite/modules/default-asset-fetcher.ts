@@ -96,8 +96,9 @@ export class DefaultAssetFetcher implements AssetFetcher {
     for (const su of urls) {
       try {
         const r = await fetch(su);
+        if (r.status !== 200) throw new Error("Failed to fetch "+su);
         const d = await r.text();
-        console.debug("fetched from network", url, su);
+        console.debug("fetched from network", url, su, r.status);
         this.cache.set(url, d);
         return d;
       } catch (e) {

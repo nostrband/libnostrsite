@@ -500,8 +500,13 @@ export class ThemeEngine {
           <itunes:email><![CDATA[${admin}]]></itunes:email>
         </itunes:owner>
             `;
-    if (posts && posts.length > 0)
-      rss += `<pubDate>${pubDate(posts[0].published_at)}</pubDate>`;
+    if (posts && posts.length > 0) {
+      const date = pubDate(posts[0].published_at);
+      rss += `
+      <pubDate>${date}</pubDate>
+      <lastBuildDate>${date}</lastBuildDate>
+      `;
+    }
 
     const image = this.settings!.logo || this.settings!.icon;
     if (image) {

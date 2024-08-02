@@ -353,7 +353,9 @@ export default async function ghost_head(options: any) {
     }
 
     // manifest
-    head.push(`<link rel="manifest" href="${site.url}/manifest.webmanifest" />`);
+    head.push(
+      `<link rel="manifest" href="${site.url}/manifest.webmanifest" />`
+    );
 
     // jquery is assumed by many themes
     head.push(`
@@ -544,6 +546,12 @@ export default async function ghost_head(options: any) {
         `<link rel="alternate" type="application/rss+xml" title="${escapeExpression(
           object ? object.title : site.title
         )}" href="${escapeExpression(canonical + "rss/")}">`
+      );
+    } else {
+      head.push(
+        `<link rel="alternate" type="application/rss+xml" title="${escapeExpression(
+          site.title
+        )}" href="${escapeExpression(origin + "/rss/")}">`
       );
     }
 

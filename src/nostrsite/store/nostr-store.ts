@@ -738,23 +738,45 @@ export class NostrStore extends RamStore {
 
     const filters: NDKFilter[] = [];
     const add = (kind: number, tag?: { tag: string; value: string }) => {
-      const f: NDKFilter = {
-        authors: this.settings.contributor_pubkeys,
-        kinds: [kind],
-        limit,
-      };
-      if (tag) {
-        // @ts-ignore
-        f["#" + tag.tag] = [tag.value];
-      }
-      if (since) {
-        f.since = since;
-      }
-      if (until) {
-        f.until = until;
-      }
+      const tagKey = "#" + tag?.tag;
+      // reuse filters w/ same tag
+      let f: NDKFilter | undefined = filters.find(f => {
+        if (!tag) return !Object.keys(f).find(k => k.startsWith("#"))
+        else return tagKey in f;
+      });
 
-      filters.push(f);
+      if (!f) {
+        // first filter for this tag
+        f = {
+          authors: this.settings.contributor_pubkeys,
+          kinds: [kind],
+          limit,
+        }
+        if (tag) {
+          // @ts-ignore
+          f[tagKey] = [tag.value];
+        }
+        if (since) {
+          f.since = since;
+        }
+        if (until) {
+          f.until = until;
+        }
+
+        // append new filter
+        filters.push(f);
+      } else {
+        // append tag and kind
+        if (tag) {
+          // @ts-ignore
+          if (!f[tagKey].includes(tag.value)) {
+            // @ts-ignore
+            f[tagKey].push(tag.value);
+          }
+        }
+        if (!f.kinds!.includes(kind))
+          f.kinds!.push(kind);
+      }
     };
 
     let kinds = SUPPORTED_KINDS;
