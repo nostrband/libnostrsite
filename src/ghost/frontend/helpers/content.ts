@@ -93,8 +93,7 @@ export default function content(options: any = {}) {
   }
 
   let html = self.html;
-  if (runTruncate)
-    html = downsize(self.html, truncateOptions);
+  if (runTruncate) html = downsize(self.html, truncateOptions);
 
   html = `<np-content id="${self.id}">${html}</np-content>`;
 
@@ -110,6 +109,15 @@ export default function content(options: any = {}) {
 
   if (site.config.get("no_default_plugins") !== "true") {
     // FIXME replace w/ HBS template to avoid code injection
+
+    /*
+    <np-content-cta
+      data-cta-list="zap,like,repost,follow,openWith"
+      data-cta-main="zap"
+      data-button-color="${site.accent_color}"
+      data-text-button-color="${getContrastingTextColor(site.accent_color)}"
+    > */
+
     html += `<center><div
       style='display: block; width: 100%; background-color: ${
         site.accent_color
@@ -123,6 +131,7 @@ export default function content(options: any = {}) {
       data-relays="${relays.join(",")}"
       data-button-color="${site.accent_color}"
     >⚡️ Zap</div></center>`;
+    // </np-content-cta>
 
     html += `<zap-threads 
   mode="chat"

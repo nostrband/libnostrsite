@@ -13,6 +13,7 @@ import includes from "lodash-es/includes";
 import {
   CSS_VENOBOX,
   JQUERY,
+  // JS_CONTENT_CTA,
   JS_NOSTR_LOGIN,
   JS_ZAPTHREADS,
 } from "../../../nostrsite/consts";
@@ -377,13 +378,20 @@ export default async function ghost_head(options: any) {
     <script type="text/javascript" async src="${JS_ZAPTHREADS}"></script>
   `);
 
+  //     head.push(`
+  //   <script type="text/javascript" src="${JS_CONTENT_CTA}"></script>
+  // `);
+
       head.push(`
     <script async src="${JS_NOSTR_LOGIN}"
       data-perms="sign_event:1,sign_event:9734"
     ></script>
     <script>
+      const ep = window.nostrSite.plugins.register("nostr-login");
       document.addEventListener("nlAuth", async (e) => {
         console.log("nlAuth", e);
+        ep.dispatch("auth", { type: e.detail.type, pubkey: e.detail.pubkey });
+
         if (e.detail.type === 'login' || e.detail.type === 'signup') {
           window.__nlAuthed = true;
         } else {

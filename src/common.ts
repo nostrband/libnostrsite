@@ -13,8 +13,11 @@ import { slugify } from "./ghost/helpers/slugify";
 import {
   GlobalNostrSite,
   PLAY_FEATURE_BUTTON_PREFIX,
+  PluginEndpoint,
+  PluginInterface,
   RenderMode,
   Store,
+  User,
   fetchEvent,
   fetchOutboxRelays,
   isAudioUrl,
@@ -64,7 +67,10 @@ export async function getMetaAddr(): Promise<SiteAddr | undefined> {
   return undefined;
 }
 
-export async function renderCurrentPage(path = "", options?: { mode: RenderMode }) {
+export async function renderCurrentPage(
+  path = "",
+  options?: { mode: RenderMode }
+) {
   // read-only thing, but SW should re-fetch
   // it and update HBS object if something changes
   const addr = await getMetaAddr();
@@ -76,7 +82,7 @@ export async function renderCurrentPage(path = "", options?: { mode: RenderMode 
   await renderer.start({
     addr,
     origin: window.location.origin,
-    mode: options?.mode || "iife"
+    mode: options?.mode || "iife",
   });
   const t1 = Date.now();
   console.log("renderer created in ", t1 - start);
@@ -351,6 +357,112 @@ export async function getCachedSite(
   else return undefined;
 }
 
+class PluginEndpointImpl implements PluginEndpoint {
+  id: string;
+  core: PluginInterfaceImpl;
+
+  constructor(id: string, core: PluginInterfaceImpl) {
+    this.id = id;
+    this.core = core;
+  }
+
+  subscribe(event: string, cb: (data: any) => any) {
+    this.core.subscribe(this.id, event, cb);
+  }
+
+  dispatch(event: string, data: any) {
+    this.core.dispatch(this.id, event, data);
+  }
+}
+
+interface PluginState {
+  subs: Map<string, (data: any) => any>;
+}
+
+class PluginInterfaceImpl implements PluginInterface {
+  plugins: Map<string, PluginState>;
+
+  constructor() {
+    this.plugins = new Map();
+  }
+
+  subscribe(id: string, event: string, cb: (data: any) => any) {
+    this.plugins.get(id)!.subs.set(event, cb);
+  }
+
+  dispatch(senderId: string, event: string, data: any) {
+    console.log("plugins dispatch", event, "by", senderId, "data", data);
+    for (const [id, state] of this.plugins.entries()) {
+      const cb = state.subs.get(event);
+
+      // FIXME check plugin is allowed to receive this event
+      if (cb) {
+        console.log("plugins deliver", event, "to", id, "data", data);
+        cb(data);
+      }
+    }
+  }
+
+  register(id: string) {
+    if (this.plugins.has(id)) {
+      console.warn("Plugin ", id, "already registered");
+      return undefined;
+    }
+
+    // FIXME check that plugin was added by user
+
+    const state: PluginState = {
+      subs: new Map(),
+    };
+    this.plugins.set(id, state);
+
+    return new PluginEndpointImpl(id, this);
+  }
+}
+
+class UserInterface {
+  $user?: User;
+  core: PluginInterface;
+
+  constructor(core: PluginInterface) {
+    this.core = core;
+    const ep = this.core.register("user-interface");
+    ep!.subscribe("auth", (data) => {
+      if (data.type === "logout") {
+        this.$user = undefined;
+      } else {
+        this.$user = {
+          pubkey: data.pubkey,
+          npub: nip19.npubEncode(data.pubkey),
+        };
+      }
+    });
+
+    // how do we inject signup into "Like" flow?
+    // - "like" plugin sends "action-like"?
+    // - or does each plugin need to check if user is authed,
+    // and if now send "need auth" first? 
+    // - well we don't know if like plugin needs auth or not,
+    // it only knows for itself right?
+    // - so it sends "need-auth" and waits for next "auth" event?
+    // - how can it know if need-auth succeeded or not etc?
+    // - so we're kind-of calling a dynamically-defined function
+    // and should be able to wait for it's completion? then a) only
+    // one if the subscribers should receive it? - no! dispatch event does
+    // synchronous processing of all subs, b) should await for 
+    // all handlers? c) return value from them?
+
+    // and then will itself receive that event and show "signup" modal and when it's 
+    // done sends "signup"
+  }
+
+  user() {
+    return () => {
+      return this.$user;
+    };
+  }
+}
+
 export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
   const s: GlobalNostrSite = { ...tmpl };
   if (!s.renderCurrentPage) s.renderCurrentPage = renderCurrentPage;
@@ -375,6 +487,15 @@ export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
       putCache: dbi.putCache.bind(dbi),
       getCache: dbi.getCache.bind(dbi),
     };
+  }
+  // only init on the client inside a browser tab
+  if (globalThis.document) {
+    if (!s.plugins) {
+      s.plugins = new PluginInterfaceImpl();
+    }
+    if (!s.user) {
+      s.user = new UserInterface(s.plugins).user();
+    }
   }
 
   return s;
@@ -423,7 +544,7 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
       div.style.cssText = cssText;
       // effects
       div.style.opacity = "1";
-      div.style.visibility = "visible"; 
+      div.style.visibility = "visible";
       img.parentNode!.insertBefore(div, img);
       img.remove();
     }

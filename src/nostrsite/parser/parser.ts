@@ -652,7 +652,11 @@ export class NostrParser {
         code = `<a href="${url}" class="vbx-media" target="_blank"><img class="venobox" src="${url}" /></a>`;
       }
 
+      // FIXME: if url contains stuff like "’" then marked might
+      // run it through percent encode and href will contain "%E2%80%99",
+      // and it's not clear how we have to reimplement it here...
       const nodes = dom(`a[href="${url}"]`);
+      // console.log("nodes", `a[href="${url}"]`, nodes);
       nodes.each((_: number, el: any) => {
         const node = dom(el);
         let replace = false;
@@ -692,7 +696,7 @@ export class NostrParser {
                 "outerHTML"
               )}</np-embed>`;
               replace = node.text() === url;
-//              console.log("web link replace", replace, url, '"'+node+'"', code);
+              console.log("web link replace", replace, url, '"'+node+'"', code);
             }
           } catch (e) {
             console.log("Bad link", url, e);
@@ -804,7 +808,7 @@ export class NostrParser {
   private parseTextLinks(text: string): string[] {
     if (!text) return [];
     const RX =
-      /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi;
+      /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%\?=~_’|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi;
     // the one below doesn't cut the trailing dot "."
     //      /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
     return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
