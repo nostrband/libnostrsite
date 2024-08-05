@@ -24,12 +24,14 @@ const NJUMP_DOMAIN = "njump.me";
 // for that we inject this empty feature_image and then
 // in the tab replace these <img> elements with <video> elements
 // with all styles copied and <play> button overlaid. but
-// we also clear this feature_image thing on a post page bcs 
-// there is no need for preview there - a player is embedded 
+// we also clear this feature_image thing on a post page bcs
+// there is no need for preview there - a player is embedded
 // in the post page.
 export const PLAY_FEATURE_BUTTON_PREFIX = "data:image/gif+np-feature-video:";
 // smallest possible transparent gif: https://stackoverflow.com/a/9967193
-const PLAY_FEATURE_BUTTON = PLAY_FEATURE_BUTTON_PREFIX+"<video_url>;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+const PLAY_FEATURE_BUTTON =
+  PLAY_FEATURE_BUTTON_PREFIX +
+  "<video_url>;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 
 function fromUNIX(ts: number | undefined) {
   return DateTime.fromMillis((ts || 0) * 1000).toISO() || "";
@@ -327,14 +329,17 @@ export class NostrParser {
 
     post.markdown = await this.replaceNostrLinks(post, post.markdown!);
 
-    // images from links 
+    // images from links
     post.images = this.parseImages(post);
     post.videos = this.parseVideos(post);
 
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
     if (!post.feature_image && post.videos.length)
-      post.feature_image = PLAY_FEATURE_BUTTON.replace("<video_url>", encodeURIComponent(post.videos[0]));
+      post.feature_image = PLAY_FEATURE_BUTTON.replace(
+        "<video_url>",
+        encodeURIComponent(post.videos[0])
+      );
 
     // replace media links and oembeds
     this.embedLinks(post);
@@ -412,7 +417,10 @@ export class NostrParser {
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
     if (!post.feature_image && post.videos.length)
-      post.feature_image = PLAY_FEATURE_BUTTON.replace("<video_url>", encodeURIComponent(post.videos[0]));
+      post.feature_image = PLAY_FEATURE_BUTTON.replace(
+        "<video_url>",
+        encodeURIComponent(post.videos[0])
+      );
 
     const includeFeatureImageInPost =
       this.getConf("include_feature_image") === "true";
@@ -628,7 +636,9 @@ export class NostrParser {
     // convert nostr links to njump links
     const allLinks = [
       ...post.links,
-      ...post.nostrLinks.map(l => `https://${NJUMP_DOMAIN}/${l.split('nostr:')[1]}`)
+      ...post.nostrLinks.map(
+        (l) => `https://${NJUMP_DOMAIN}/${l.split("nostr:")[1]}`
+      ),
     ];
 
     // replace media links
@@ -642,52 +652,61 @@ export class NostrParser {
         code = `<a href="${url}" class="vbx-media" target="_blank"><img class="venobox" src="${url}" /></a>`;
       }
 
-      const node = dom(`a[href="${url}"]`);
-      let replace = false;
-      if (code) {
-        // links with an anchor (made using markdown [text](url) syntax)
-        // aren't replaced, bcs anchor would be lost, which user definitely
-        // didn't want
-        replace = node.text() === url;
-      } else {
-        // web/nostr link
-        try {
-          const u = new URL(url);
-          if (u.hostname === NJUMP_DOMAIN) {
-            // nostr link
-            const id = u.pathname.split('/')[1];
-            // console.log("embed njump", id);
-            if (
-              id.startsWith("note1") ||
-              id.startsWith("nevent1") ||
-              id.startsWith("naddr1") ||
-              id.startsWith("npub1") ||
-              id.startsWith("nprofile1")
-            ) {
-              code = `<np-embed nostr='${id}'>${node.prop('outerHTML')}</np-embed>`;
-              // njump links are replaced unconditionally, bcs
-              // we ourselves set profiles' anchors to usernames,
-              // and so we can't distinguish btw markdown-provided
-              // anchor or our own. 
-              // const a = node.text().split("...");
-              replace = true; // a.length === 2 && id.startsWith(a[0]) && id.endsWith(a[1]);
+      const nodes = dom(`a[href="${url}"]`);
+      nodes.each((_: number, el: any) => {
+        const node = dom(el);
+        let replace = false;
+        if (code) {
+          // links with an anchor (made using markdown [text](url) syntax)
+          // aren't replaced, bcs anchor would be lost, which user definitely
+          // didn't want
+          replace = node.text() === url;
+        } else {
+          // web/nostr link
+          try {
+            const u = new URL(url);
+            if (u.hostname === NJUMP_DOMAIN) {
+              // nostr link
+              const id = u.pathname.split("/")[1];
+              // console.log("embed njump", id);
+              if (
+                id.startsWith("note1") ||
+                id.startsWith("nevent1") ||
+                id.startsWith("naddr1") ||
+                id.startsWith("npub1") ||
+                id.startsWith("nprofile1")
+              ) {
+                code = `<np-embed nostr='${id}'>${node.prop(
+                  "outerHTML"
+                )}</np-embed>`;
+                // njump links are replaced unconditionally, bcs
+                // we ourselves set profiles' anchors to usernames,
+                // and so we can't distinguish btw markdown-provided
+                // anchor or our own.
+                // const a = node.text().split("...");
+                replace = true; // a.length === 2 && id.startsWith(a[0]) && id.endsWith(a[1]);
+              }
+            } else {
+              // web link
+              code = `<np-embed url='${url}'>${node.prop(
+                "outerHTML"
+              )}</np-embed>`;
+              replace = node.text() === url;
+//              console.log("web link replace", replace, url, '"'+node+'"', code);
             }
-          } else {
-            // web link
-            code = `<np-embed url='${url}'>${node.prop('outerHTML')}</np-embed>`;
-            replace = node.text() === url;
+          } catch (e) {
+            console.log("Bad link", url, e);
           }
-        } catch (e) {
-          console.log("Bad link", url, e);
         }
-      }
 
-      // console.log("embed url", replace, url, node.html(), node.text(), code);
-      if (code && replace) node.replaceWith(code);
+        // console.log("embed url", replace, url, node.html(), node.text(), code);
+        if (code && replace) node.replaceWith(code);
+
+      });
     }
 
     // done
-    post.html = dom('body').html();
+    post.html = dom("body").html();
   }
 
   private getConf(name: string): string | undefined {
@@ -785,7 +804,9 @@ export class NostrParser {
   private parseTextLinks(text: string): string[] {
     if (!text) return [];
     const RX =
-      /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
+      /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi;
+    // the one below doesn't cut the trailing dot "."
+    //      /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
     return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
   }
 
