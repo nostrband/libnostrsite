@@ -45,6 +45,8 @@ export const EMBED_URL_PARTIAL = `
     width: 24px;
     height: 24px;
     border-radius: 3px;
+    margin: 0;
+    padding: 0;
   }
   figure.np-embed-figure .np-embed-url {
     flex: 5;
