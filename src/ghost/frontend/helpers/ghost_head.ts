@@ -13,9 +13,6 @@ import includes from "lodash-es/includes";
 import {
   CSS_VENOBOX,
   JQUERY,
-  // JS_CONTENT_CTA,
-  JS_NOSTR_LOGIN,
-  JS_ZAPTHREADS,
 } from "../../../nostrsite/consts";
 import { nip19 } from "nostr-tools";
 import { PLAY_FEATURE_BUTTON_PREFIX } from "../../..";
@@ -373,47 +370,6 @@ export default async function ghost_head(options: any) {
       head.push(`
     <link rel="preload" as="style" href="${CSS_VENOBOX}" />
       `);
-
-      head.push(`
-    <script type="text/javascript" async src="${JS_ZAPTHREADS}"></script>
-  `);
-
-  //     head.push(`
-  //   <script type="text/javascript" src="${JS_CONTENT_CTA}"></script>
-  // `);
-
-      head.push(`
-    <script async src="${JS_NOSTR_LOGIN}"
-      data-perms="sign_event:1,sign_event:9734"
-    ></script>
-    <script>
-      const ep = window.nostrSite.plugins.register("nostr-login");
-      document.addEventListener("nlAuth", async (e) => {
-        console.log("nlAuth", e);
-        ep.dispatch("auth", { type: e.detail.type, pubkey: e.detail.pubkey });
-
-        if (e.detail.type === 'login' || e.detail.type === 'signup') {
-          window.__nlAuthed = true;
-        } else {
-          window.__nlAuthed = false;
-        }
-        const zapThreads = document.querySelector('zap-threads');
-        if (zapThreads) {
-          if (window.__nlAuthed)
-            zapThreads.setAttribute("user", window.nostrSite.nostrTools.nip19.npubEncode(await window.nostr.getPublicKey()));
-          else
-            zapThreads.setAttribute("user", "");
-        }
-        const zapButton = document.querySelector('#zap-button');
-        if (zapButton) {
-          if (window.__nlAuthed)
-            zapButton.setAttribute("data-anon", "");
-          else
-            zapButton.setAttribute("data-anon", "true");
-        }
-      });
-    </script>
-  `);
     }
 
     // debug('end fetch');

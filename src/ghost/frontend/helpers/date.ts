@@ -59,7 +59,7 @@ export default function (...attrs: any[]) {
     locale = options.data.site.locale,
   } = options.hash;
 
-  format = format.replace("YYYY", "yyyy").replace("DD", "dd");
+  format = format.replace("YYYY", "yyyy").replace("DD", "dd").replace("D", "d");
 
   //  const timeNow = moment().tz(timezone);
   const timeNow = DateTime.now().setZone(timezone);

@@ -22,11 +22,12 @@ import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
-import { fetchEvents, isBlossomUrl } from "./utils";
+import { fetchEvent, fetchEvents, isBlossomUrl } from "./utils";
 import { dbi } from "./store/db";
-import { AssetFetcher, Store } from ".";
+import { AssetFetcher, Profile, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
 import { fetchNostrSite, getCachedSite } from "..";
+import { nip19 } from "nostr-tools";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -480,5 +481,61 @@ export class NostrSiteRenderer implements Renderer {
 
   public hasRss(path: string) {
     return this.engine!.hasRss(path);
+  }
+
+  public prepareRelays(options?: any) {
+    const relays = [
+      ...this.settings!.contributor_relays,
+      ...this.settings!.contributor_inbox_relays,
+    ];
+    if (options) {
+      if (options.relays) relays.push(...options.relays);
+      if (options.outboxRelays) relays.push(...OUTBOX_RELAYS);
+    }
+
+    return relays;
+  }
+
+  public async fetchEvents(
+    filters: NDKFilter | NDKFilter[],
+    options?: {
+      relays?: string[];
+      timeoutMs?: number;
+    }
+  ) {
+    return fetchEvents(
+      this.ndk!,
+      filters,
+      this.prepareRelays(options),
+      options ? options.timeoutMs : undefined
+    );
+  }
+
+  public async fetchEvent(
+    filters: NDKFilter | NDKFilter[],
+    options?: {
+      relays?: string[];
+      timeoutMs?: number;
+      outboxRelays?: boolean;
+    }
+  ) {
+    return fetchEvent(
+      this.ndk!,
+      filters,
+      this.prepareRelays(options),
+      options ? options.timeoutMs : undefined
+    );
+  }
+
+  public async fetchProfiles(pubkeys: string[], relayHints: string[] = []) {
+    await (this.store as NostrStore).fetchProfiles(pubkeys, relayHints);
+
+    const profiles: Profile[] = [];
+    for (const p of pubkeys) {
+      const profile = await this.store!.get(nip19.npubEncode(p), "profiles");
+      if (profile) profiles.push((profile as Profile));
+    }
+
+    return profiles;
   }
 }

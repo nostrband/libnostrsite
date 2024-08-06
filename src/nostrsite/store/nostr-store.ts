@@ -260,6 +260,8 @@ export class NostrStore extends RamStore {
     await this.loadFromDb(this.maxObjects);
     // first page load? fetch some from network
     if (!this.posts.length) await this.fetchAllObjects(100);
+    // ensure relays
+    else await this.fetchRelays();
   }
 
   public async load(maxObjects: number = 0) {
@@ -299,8 +301,9 @@ export class NostrStore extends RamStore {
     if (!getUrl) getUrl = this.getUrlCb;
     this.getUrlCb = getUrl;
 
-    this.posts.forEach((post) => {
+    this.posts.forEach(async (post) => {
       post.url = getUrl!(post);
+      if (!post.html) await this.parser.prepareHtml(post);
     });
     this.tags.forEach((tag) => {
       tag.url = getUrl!(tag);
@@ -568,7 +571,11 @@ export class NostrStore extends RamStore {
     this.tags.sort((a, b) => b.postIds.length - a.postIds.length);
 
     // sort posts desc by update time
-    this.posts.sort((a, b) => b.event.created_at - a.event.created_at);
+    this.posts.sort((a, b) => { 
+      if (a.published_at === b.published_at) return 0;
+      if (b.published_at! < a.published_at!) return -1;
+      return 1;
+    });
   }
 
   private async fetchContributors() {
@@ -670,7 +677,7 @@ export class NostrStore extends RamStore {
     return this.mode !== "ssr" && this.mode !== "preview";
   }
 
-  private async fetchProfiles(pubkeys: string[], relayHints: string[] = []) {
+  public async fetchProfiles(pubkeys: string[], relayHints: string[] = []) {
     // only fetch new ones
     pubkeys = pubkeys.filter(
       (pubkey) => !this.profiles.find((p) => p.pubkey === pubkey)

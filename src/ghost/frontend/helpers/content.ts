@@ -93,7 +93,8 @@ export default function content(options: any = {}) {
   }
 
   let html = self.html;
-  if (runTruncate) html = downsize(self.html, truncateOptions);
+  if (runTruncate)
+    html = downsize(self.html, truncateOptions);
 
   html = `<np-content id="${self.id}">${html}</np-content>`;
 
@@ -109,29 +110,23 @@ export default function content(options: any = {}) {
 
   if (site.config.get("no_default_plugins") !== "true") {
     // FIXME replace w/ HBS template to avoid code injection
-
-    /*
-    <np-content-cta
-      data-cta-list="zap,like,repost,follow,openWith"
+    html += `<np-content-cta
+      data-cta-list="zap,open-with"
       data-cta-main="zap"
       data-button-color="${site.accent_color}"
-      data-text-button-color="${getContrastingTextColor(site.accent_color)}"
-    > */
-
-    html += `<center><div
-      style='display: block; width: 100%; background-color: ${
+      data-text-button-color="${getContrastingTextColor(
         site.accent_color
-      }; color: ${getContrastingTextColor(
-      site.accent_color
-    )}; border: 1px solid #aaa; border-radius: 5px; cursor: pointer; padding: 6px;'
+      )}"
+    ><div
+      style='display: none'
       id="zap-button"
       data-anon="true"
       data-npub="${self.npub}"
       data-note-id="${self.noteId}"
       data-relays="${relays.join(",")}"
       data-button-color="${site.accent_color}"
-    >⚡️ Zap</div></center>`;
-    // </np-content-cta>
+    />
+    </np-content-cta>`;
 
     html += `<zap-threads 
   mode="chat"

@@ -479,7 +479,6 @@ export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
       isVideoUrl,
       isAudioUrl,
       isImageUrl,
-      fetchEvent,
       getOembedUrl,
     };
   if (!s.dbCache) {

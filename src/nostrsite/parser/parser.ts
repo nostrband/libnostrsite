@@ -259,7 +259,7 @@ export class NostrParser {
     if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
 
     const id = eventId(e);
-    const html = await marked.parse(e.content);
+//    const html = await marked.parse(e.content);
     const post: Post = {
       type: "post",
       id,
@@ -269,7 +269,7 @@ export class NostrParser {
       uuid: e.id,
       url: "",
       title: tv(e, "title"),
-      html,
+      html: null,
       comment_id: e.id,
       feature_image: tv(e, "image"),
       feature_image_alt: null,
@@ -453,10 +453,10 @@ export class NostrParser {
     post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
     // parse markdown to html
-    post.html = await marked.parse(post.markdown);
+    // post.html = await marked.parse(post.markdown);
 
     // FIXME remove when it's implemented on the client as plugin
-    this.embedLinks(post);
+    // this.embedLinks(post);
 
     // now cut all links to create a title and excerpt
     let textContent = content;
@@ -615,6 +615,11 @@ export class NostrParser {
     // return s;
   }
 
+  public async prepareHtml(post: Post) {
+    post.html = await marked.parse(post.markdown || "");
+    this.embedLinks(post);
+  }
+
   private embedLinks(post: Post) {
     // ok so we arrive to post.html from markdown or plaintext
     // with nostr-links replaced w/ njump.
@@ -711,6 +716,13 @@ export class NostrParser {
 
     // done
     post.html = dom("body").html();
+
+    // replace hashtags with links too
+    for (const t of post.tags) {
+      const rx = new RegExp(`#${t.name}`, "gi");
+      // console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
+      post.html = post.html!.replace(rx, `<a href='${t.url}'>#${t.name}</a>`);
+    }
   }
 
   private getConf(name: string): string | undefined {

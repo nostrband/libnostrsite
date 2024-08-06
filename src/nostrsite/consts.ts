@@ -31,10 +31,10 @@ export const JS_VENOBOX = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venob
 export const CSS_VENOBOX = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
 export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.5.5.js";
 export const JS_NOSTR_LOGIN = "https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js";
-export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.9/dist/index.js";
+export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.10/dist/index.js";
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.3.js";
-// export const JS_CONTENT_CTA = "/content-cta.js";
+export const JS_CONTENT_CTA = "https://cdn.npubpro.com/content-cta.iife.1.0.0.js";
 
 export const BLOSSOM_FALLBACKS = [
   "https://blossom.npubpro.com",
@@ -51,5 +51,5 @@ export const PRECACHE_ENTRIES = [
   JS_SEARCH,
   JS_ZAP,
   JS_EMBEDS,
-  // JS_CONTENT_CTA
+  JS_CONTENT_CTA
 ];
