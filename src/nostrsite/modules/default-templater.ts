@@ -20,7 +20,7 @@ export class DefaultTemplater implements Templater {
 
     if (context.context.includes("home")) {
       return this.theme?.templates.includes("home") ? "home" : "index";
-    } else if (context.context.includes("paged")) {
+    } else if (context.context.includes("index")) {
       return "index";
     } else if (context.context.includes("post")) {
       // FIXME also support custom-{template-name} specified in post/page

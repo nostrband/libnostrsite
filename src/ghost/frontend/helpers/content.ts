@@ -117,22 +117,23 @@ export default function content(options: any = {}) {
       data-text-button-color="${getContrastingTextColor(
         site.accent_color
       )}"
-    ><div
-      style='display: none'
+    ></np-content-cta>
+    <div
+      style="display: none"
       id="zap-button"
       data-anon="true"
       data-npub="${self.npub}"
       data-note-id="${self.noteId}"
       data-relays="${relays.join(",")}"
       data-button-color="${site.accent_color}"
-    />
-    </np-content-cta>`;
+    ></div>
+    `;
 
     html += `<zap-threads 
   mode="chat"
   anchor="${self.id}"
   relays="${relays.join(",")}"
-  />`;
+  ></zap-threads>`;
   }
 
   return new SafeString(html);

@@ -34,7 +34,7 @@ export const JS_NOSTR_LOGIN = "https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js
 export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.10/dist/index.js";
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.3.js";
-export const JS_CONTENT_CTA = "https://cdn.npubpro.com/content-cta.iife.1.0.0.js";
+export const JS_CONTENT_CTA = "https://cdn.npubpro.com/content-cta.iife.1.0.1.js";
 
 export const BLOSSOM_FALLBACKS = [
   "https://blossom.npubpro.com",

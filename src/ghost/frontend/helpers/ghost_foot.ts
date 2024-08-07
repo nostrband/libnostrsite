@@ -84,7 +84,9 @@ export default function ghost_foot(options: any) {
     data-perms="sign_event:1,sign_event:9734"
   ></script>
   <script>
-    (() => {
+    (async () => {
+      if (!window.nostrSite)
+        await new Promise((ok) => document.addEventListener('npLoad', ok));
       const ep = window.nostrSite.plugins.register("nostr-login");
       document.addEventListener("nlAuth", async (e) => {
         console.log("nlAuth", e);
@@ -117,7 +119,9 @@ export default function ghost_foot(options: any) {
     foot.push(`
   <script src="${JS_ZAP}"></script>
   <script>
-    (() => {
+    (async () => {
+      if (!window.nostrSite)
+        await new Promise((ok) => document.addEventListener('npLoad', ok));
       const ep = window.nostrSite.plugins.register("nostr-zap");
       console.log("nostr-zap ep", ep);
       ep.subscribe("action-zap", () => {

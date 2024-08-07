@@ -207,6 +207,7 @@ export class NostrStore extends RamStore {
   private async fetchAllObjects(max: number = 0, since: number = 0) {
     console.log(Date.now(), "start sync, max", max);
     let until = 0;
+    let reqsLeft = 30; // 30*300=10k
     do {
       // const was_count = this.posts.length;
       const newUntil = await this.fetchObjects(since, until);
@@ -229,7 +230,8 @@ export class NostrStore extends RamStore {
         break;
       }
       until = newUntil!;
-    } while (this.posts.length < max);
+      --reqsLeft;
+    } while (this.posts.length < max && reqsLeft > 0);
 
     console.log(Date.now(), "done sync, posts", this.posts.length);
   }
@@ -748,6 +750,7 @@ export class NostrStore extends RamStore {
       const tagKey = "#" + tag?.tag;
       // reuse filters w/ same tag
       let f: NDKFilter | undefined = filters.find(f => {
+        if (!f.kinds?.includes(kind)) return false;
         if (!tag) return !Object.keys(f).find(k => k.startsWith("#"))
         else return tagKey in f;
       });
@@ -824,18 +827,21 @@ export class NostrStore extends RamStore {
     until?: number,
     subscribe?: boolean
   ) {
+    if (this.isOffline()) return until;
+
     const filters = this.createTagFilters(since, until);
     if (!filters.length) {
       console.warn("Empty filters for 'include' tags");
       return until;
     }
 
-    if (this.isOffline()) return until;
-
     const relays = [
       ...(this.settings.contributor_relays || this.settings.admin_relays),
     ].filter((r) => !BLACKLISTED_RELAYS.includes(r));
     console.warn("fetchByFilter", since, until, subscribe, relays, filters);
+
+    let eose = false;
+    const events: NDKEvent[] = [];
 
     const sub = this.ndk.subscribe(
       filters,
@@ -844,9 +850,6 @@ export class NostrStore extends RamStore {
       false // auto-start
     );
     this.subs.push(sub);
-
-    let eose = false;
-    const events: NDKEvent[] = [];
 
     const queue = new PromiseQueue();
     let newUntil = until;

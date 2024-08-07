@@ -149,6 +149,9 @@ export class RamStore implements Store {
                   p.authors.find(
                     (a) => authors.includes(a.slug) || authors.includes(a.id)
                   )) &&
+                (!req.kinds ||
+                  !req.kinds.length ||
+                  req.kinds.includes(p.event.kind!)) &&
                 (!primary_authors.length ||
                   primary_authors.includes(p.primary_author?.slug || "") ||
                   primary_authors.includes(p.primary_author?.id || ""))

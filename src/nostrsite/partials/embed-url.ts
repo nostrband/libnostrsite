@@ -23,6 +23,7 @@ export const EMBED_URL_PARTIAL = `
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    word-break: break-word;
   }
   figure.np-embed-figure .np-embed-description {
     flex: 5;
@@ -32,6 +33,7 @@ export const EMBED_URL_PARTIAL = `
     -webkit-line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    word-break: break-word;
   }
   figure.np-embed-figure .np-embed-provider {
     display: flex;

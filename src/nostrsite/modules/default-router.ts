@@ -34,6 +34,18 @@ export class DefaultRouter implements Router {
     };
     if (match("/") || match("/rss/")) {
       route.context = ["home", "index"];
+    } else if (match("/notes/") || match("/notes")) {
+      route.context = ["kind:1", "index"];
+      if (match("/notes/page/*")) {
+        route.context.push("paged");
+        route.param = param("notes/page");
+      }
+    } else if (match("/posts/") || match("/posts")) {
+      route.context = ["kind:30023", "index"];
+      if (match("/posts/page/*")) {
+        route.context.push("paged");
+        route.param = param("posts/page");
+      }
     } else if (match("/page/*")) {
       route.context = ["paged", "index"];
       route.param = param("page");
@@ -65,6 +77,7 @@ export class DefaultRouter implements Router {
 
     if (
       !route.context.includes("home") &&
+      !route.context.find((c) => c.startsWith("kind:")) &&
       !route.context.includes("error") &&
       !route.param
     ) {

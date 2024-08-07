@@ -226,7 +226,7 @@ export class ThemeEngine {
       data: {
         site: {
           ...this.settings,
-          url
+          url,
         },
         labs: {},
         config: this.config,
@@ -294,22 +294,38 @@ export class ThemeEngine {
     const data: Context = {
       context: route.context,
       mediaUrls: [],
-      hasRss: route.hasRss
+      hasRss: route.hasRss,
     };
 
     if (route.context.includes("home")) {
       const list = await this.store.list({ type: "posts", limit });
       data.posts = list.posts;
       data.pagination = list.pagination;
-    } else if (route.context.includes("paged")) {
-      const pageNum = parseInt(route.param!);
+    } else if (route.context.includes("index")) {
+      // paged or kind:* (except for home above)
+      const pageNum = route.context.includes("paged")
+        ? parseInt(route.param!)
+        : undefined;
+      const kinds = route.context
+        .filter((c) => c.startsWith("kind:"))
+        .map((c) => parseInt(c.split("kind:")[1]));
       const list = await this.store.list({
         type: "posts",
         page: pageNum,
+        kinds,
         limit,
       });
       data.posts = list.posts;
       data.pagination = list.pagination;
+      // } else if (route.context.includes("paged")) {
+      //   const pageNum = parseInt(route.param!);
+      //   const list = await this.store.list({
+      //     type: "posts",
+      //     page: pageNum,
+      //     limit,
+      //   });
+      //   data.posts = list.posts;
+      //   data.pagination = list.pagination;
     } else if (route.context.includes("post")) {
       const slugId = route.param!;
       data.object = await this.store.get(slugId, "posts");
@@ -363,6 +379,7 @@ export class ThemeEngine {
     if (
       !route.context.includes("error") &&
       !route.context.includes("home") &&
+      !route.context.find((c) => c.startsWith("kind:")) &&
       !route.context.includes("paged") &&
       !data.object
     ) {
@@ -486,7 +503,9 @@ export class ThemeEngine {
     >
       <channel>
         <title><![CDATA[${this.settings!.title || ""}]]></title>
-        <description><![CDATA[${this.settings!.description || ""}]]></description>
+        <description><![CDATA[${
+          this.settings!.description || ""
+        }]]></description>
         <link>${htmlUrl}</link>
         <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
         <itunes:new-feed-url>${feedUrl}</itunes:new-feed-url>

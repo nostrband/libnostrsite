@@ -46,7 +46,8 @@ export interface StoreListRequest {
   // current page
   page?: number;
 
-
+  // event kinds
+  kinds?: number[];
 }
 
 export interface Store {

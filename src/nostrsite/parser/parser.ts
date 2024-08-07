@@ -342,7 +342,7 @@ export class NostrParser {
       );
 
     // replace media links and oembeds
-    this.embedLinks(post);
+    // this.embedLinks(post);
 
     // FIXME config?
     post.og_description = post.links.find((u) => isVideoUrl(u)) || null;
@@ -701,7 +701,7 @@ export class NostrParser {
                 "outerHTML"
               )}</np-embed>`;
               replace = node.text() === url;
-              console.log("web link replace", replace, url, '"'+node+'"', code);
+              // console.log("web link replace", replace, url, '"'+node+'"', code);
             }
           } catch (e) {
             console.log("Bad link", url, e);
