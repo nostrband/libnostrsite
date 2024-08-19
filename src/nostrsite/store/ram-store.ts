@@ -148,7 +148,8 @@ export class RamStore implements Store {
       };
 
       const slugs = parseFilter("slug");
-      const tags = parseFilter("tag", true);
+      let tags = req.hashtags;
+      if (!tags) tags = parseFilter("tag", true);
       const authors = parseFilter("author");
       const primary_tags = parseFilter("primary_tag", true);
       const primary_authors = parseFilter("primary_author");
@@ -172,11 +173,11 @@ export class RamStore implements Store {
             ...this.posts.filter(
               (p) =>
                 (!slugs.length || slugs.includes(p.slug)) &&
-                (!tags.length ||
+                (!tags!.length ||
                   p.tags.find(
                     (t) =>
-                      tags.includes(t.slug.toLocaleLowerCase()) ||
-                      tags.includes(t.id)
+                      tags!.includes(t.slug.toLocaleLowerCase()) ||
+                      tags!.includes(t.id)
                   )) &&
                 (!primary_tags.length ||
                   primary_tags.includes(

@@ -45,8 +45,9 @@ export interface StoreListRequest {
   // current page
   page?: number;
 
-  // event kinds
+  // filters
   kinds?: number[];
+  hashtags?: string[];
   ids?: string[];
 }
 

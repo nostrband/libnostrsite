@@ -9,6 +9,11 @@ export class DefaultRouter implements Router {
   }
 
   route(path: string): Route {
+    path = path.split("?")[0];
+
+    // canonical form has trailing slash
+    if (!path.endsWith("/")) path += "/";
+
     const match = (prefix: string) => {
       if (prefix.startsWith("/")) prefix = prefix.substring(1);
 
@@ -22,42 +27,58 @@ export class DefaultRouter implements Router {
     };
 
     const param = (prefix: string) => {
-      return path.split(`/${prefix}/`)[1].split("/")[0].split("?")[0];
+      return path.split(`/${prefix}/`)[1].split("/")[0];
     };
-    const tail = path.split("?")[0];
-    const isRss = tail.endsWith("/rss") || tail.endsWith("/rss/");
+    const isRss = path.endsWith("/rss/");
 
     const route: Route = {
       path,
+      // ensure trailing slash
+      pathBase: path.includes("/page/") ? path.split("page/")[0] : path,
       pathHtml: path,
       context: [],
     };
+    // home feed: index+home for page 1, index+paged for others
     if (match("/") || match("/rss/")) {
-      route.context = ["home", "index"];
-    } else if (match("/notes/") || match("/notes")) {
-      route.context = ["kind:1", "index"];
+      route.context = ["index", "home"];
+    } else if (match("/page/*")) {
+      route.context = ["index", "paged"];
+      route.param = param("page");
+    } else if (match("/notes/")) {
+      // /notes/ or /notes/page/:X
+      // - kind+index(to reuse index template)+kind:X - page 1
+      // - +paged for other pages
+      route.context = ["kind", "kind:1", "index"];
       if (match("/notes/page/*")) {
         route.context.push("paged");
         route.param = param("notes/page");
       }
-    } else if (match("/posts/") || match("/posts")) {
-      route.context = ["kind:30023", "index"];
+      // same as /notes/ above
+    } else if (match("/posts/")) {
+      route.context = ["kind", "kind:30023", "index"];
       if (match("/posts/page/*")) {
         route.context.push("paged");
         route.param = param("posts/page");
       }
-    } else if (match("/page/*")) {
-      route.context = ["paged", "index"];
-      route.param = param("page");
     } else if (match("/post/*")) {
       route.context = ["post"];
       route.param = param("post");
+      // tag for page 1, tag+paged for others
     } else if (match("/tag/*")) {
       route.context = ["tag"];
       route.param = param("tag");
+      if (match(`/tag/${route.param}/page/*`)) {
+        route.context.push("paged");
+        route.param2 = param(`tag/${route.param}/page`);
+      }
     } else if (match("/author/*")) {
+      // author for page 1, author+paged for others
       route.context = ["author"];
       route.param = param("author");
+      if (match(`/author/${route.param}/page/*`)) {
+        route.context.push("paged");
+        route.param2 = param(`author/${route.param}/page`);
+      }
     } else {
       // FIXME find a static page matching the path
       console.log("bad path");
@@ -72,7 +93,7 @@ export class DefaultRouter implements Router {
 
     if (isRss && route.hasRss) {
       route.context.push("rss");
-      route.pathHtml = route.path.split("/rss")[0];
+      route.pathHtml = route.path.split("rss/")[0]; // ensure trailing slash
     }
 
     if (

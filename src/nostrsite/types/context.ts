@@ -15,4 +15,6 @@ export interface Context {
   pagination?: Pagination;
   mediaUrls: string[];
   hasRss?: boolean;
+  path: string;
+  pathBase: string;
 }

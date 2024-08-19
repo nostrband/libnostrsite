@@ -383,7 +383,10 @@ export default async function ghost_head(options: any) {
 
     const pagination = root.pagination;
     const paginationUrl = (page: number) => {
-      return urlUtils.createUrl(`/page/${page}`);
+      if (page > 1)
+        return urlUtils.createUrl(`${root.pathBase}page/${page}`);
+      else
+        return root.pathBase;
     };
     if (pagination?.prev) {
       head.push(

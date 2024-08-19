@@ -371,6 +371,10 @@ export class NostrStore extends RamStore {
   // }
 
   private async loadSw() {
+    // FIXME if site settings object changed and list of
+    // hashtags/kinds/authors expanded then we would
+    // need to reset the cache, otherwise we'd load
+    // only a subset of events from cache and not resync really
     const since = await this.loadFromDb(this.maxObjects);
     const now = Math.floor(Date.now() / 1000);
 
@@ -399,8 +403,10 @@ export class NostrStore extends RamStore {
 
       console.log("sync sw until", until);
 
-      // full bg sync since oldest object
-      this.fetchAllObjects(this.maxObjects, 0, until, true).then(async () => {
+      // full bg sync since oldest object,
+      // only scan UP TO maxObject taking loaded objects into account
+      const left = this.maxObjects - this.posts.length;
+      this.fetchAllObjects(left, 0, until, true).then(async () => {
         // mark as synced
         await dbi.setSync(this.settings.event.id!);
       });

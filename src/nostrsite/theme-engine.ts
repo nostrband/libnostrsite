@@ -296,28 +296,63 @@ export class ThemeEngine {
       context: route.context,
       mediaUrls: [],
       hasRss: route.hasRss,
+      path: route.path,
+      pathBase: route.pathBase,
     };
 
-    if (route.context.includes("home")) {
-      const list = await this.store.list({ type: "posts", limit });
-      data.posts = list.posts;
-      data.pagination = list.pagination;
-    } else if (route.context.includes("index")) {
-      // paged or kind:* (except for home above)
+    // home, kind feeds
+    if (route.context.includes("index")) {
+      const isKindFeed = route.context.includes("kind");
+
+      let hashtags = undefined;
+      let kinds = undefined;
+
+      if (isKindFeed) {
+        // kinds feed
+        kinds = route.context
+          .filter((c) => c.startsWith("kind:"))
+          .map((c) => parseInt(c.split("kind:")[1]));
+      } else {
+        // home feed
+        hashtags = this.settings!.homepage_tags
+          ? this.settings!.homepage_tags.filter((t) => t.tag === "t").map((t) =>
+              t.value.toLocaleLowerCase()
+            )
+          : undefined;
+        kinds = this.settings!.homepage_kinds
+          ? this.settings!.homepage_kinds.map((k) => parseInt(k))
+          : undefined;
+      }
+
       const pageNum = route.context.includes("paged")
         ? parseInt(route.param!)
         : undefined;
-      const kinds = route.context
-        .filter((c) => c.startsWith("kind:"))
-        .map((c) => parseInt(c.split("kind:")[1]));
+
       const list = await this.store.list({
         type: "posts",
-        page: pageNum,
         kinds,
+        hashtags,
+        page: pageNum,
         limit,
       });
       data.posts = list.posts;
       data.pagination = list.pagination;
+      // } else if (route.context.includes("index")) {
+      //   // paged or kind:* (except for home above)
+      //   const pageNum = route.context.includes("paged")
+      //     ? parseInt(route.param!)
+      //     : undefined;
+      //   const kinds = route.context
+      //     .filter((c) => c.startsWith("kind:"))
+      //     .map((c) => parseInt(c.split("kind:")[1]));
+      //   const list = await this.store.list({
+      //     type: "posts",
+      //     page: pageNum,
+      //     kinds,
+      //     limit,
+      //   });
+      //   data.posts = list.posts;
+      //   data.pagination = list.pagination;
       // } else if (route.context.includes("paged")) {
       //   const pageNum = parseInt(route.param!);
       //   const list = await this.store.list({
@@ -347,7 +382,14 @@ export class ThemeEngine {
       data.object = await this.store.get(slugId, "tags");
       data.tag = data.object as Tag;
       if (data.tag) {
-        const list = await this.store.list({ type: "posts", tag: data.tag.id });
+        const pageNum = route.context.includes("paged")
+          ? parseInt(route.param2!)
+          : undefined;
+        const list = await this.store.list({
+          type: "posts",
+          tag: data.tag.id,
+          page: pageNum,
+        });
         data.posts = list.posts;
         data.pagination = list.pagination;
       }
@@ -356,9 +398,13 @@ export class ThemeEngine {
       data.object = await this.store.get(slugId, "authors");
       data.author = data.object as Author;
       if (data.author) {
+        const pageNum = route.context.includes("paged")
+          ? parseInt(route.param2!)
+          : undefined;
         const list = await this.store.list({
           type: "posts",
           author: data.author.id,
+          page: pageNum
         });
         data.posts = list.posts;
         data.pagination = list.pagination;
