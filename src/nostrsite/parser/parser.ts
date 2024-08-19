@@ -3,7 +3,7 @@ import { Site } from "../types/site";
 import { eventId, profileId, tags, tv } from "./utils";
 import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
-import { marked } from "marked";
+import { Marked, marked } from "marked";
 // import moment from "moment-timezone";
 import { KIND_LONG_NOTE, KIND_NOTE, KIND_PACKAGE, KIND_SITE } from "../consts";
 import { Profile } from "../types/profile";
@@ -17,6 +17,7 @@ import { slugify } from "../../ghost/helpers/slugify";
 import { load as loadHtml } from "cheerio";
 import { dbi } from "../store/db";
 import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
+import markedPlaintify from "marked-plaintify";
 
 const NJUMP_DOMAIN = "njump.me";
 
@@ -82,18 +83,32 @@ export class NostrParser {
       contributor_relays: [],
       contributor_inbox_relays: [],
 
-      include_tags: tags(event, "include", 3).map((t) => ({
-        tag: t[1],
-        value: t[2],
-      })),
+      include_tags: tags(event, "include", 3)
+        .filter((t) => t.length < 5 || !t[4])
+        .map((t) => ({
+          tag: t[1],
+          value: t[2],
+        })),
+      include_kinds: tags(event, "kind")
+        .filter((t) => t.length < 4 || !t[3])
+        .map((t) => t[1]),
       include_all: !!tags(event, "include", 2).find((t) => t[1] === "*"),
       include_manual: !!tags(event, "include", 2).find((t) => t[1] === "?"),
-      include_kinds: tags(event, "kind").map((t) => t[1]),
       include_relays: tags(event, "relay").map((t) => t[1]),
 
+      // ["include", "<single-letter-tag>", "<tag-value>", "<pubkey>"*, "marker"*]
+      homepage_tags: tags(event, "include", 5)
+        .filter((t) => t[4] === "homepage")
+        .map((t) => ({
+          tag: t[1],
+          value: t[2],
+        })),
+      // ["kind", "kind>", "<pubkey>"*, "marker"*]
+      homepage_kinds: tags(event, "kind", 4)
+        .filter((t) => t[3] === "homepage")
+        .map((t) => t[1]),
+
       engine: tv(event, "z") || undefined,
-      // themes: tags(event, "y").map((t) => t[1]),
-      // plugins: tags(event, "z").map((t) => t[1]),
 
       title: tv(event, "title"),
       timezone: "UTC",
@@ -245,7 +260,7 @@ export class NostrParser {
   public async parseEvent(e: NDKEvent, store?: Store) {
     switch (e.kind) {
       case KIND_LONG_NOTE:
-        return await this.parseLongNote(e, store);
+        return await this.parseLongNote(e);
       case KIND_NOTE:
         return await this.parseNote(e, store);
 
@@ -255,11 +270,11 @@ export class NostrParser {
     return undefined;
   }
 
-  public async parseLongNote(e: NDKEvent, store?: Store) {
+  public async parseLongNote(e: NDKEvent) {
     if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
 
     const id = eventId(e);
-//    const html = await marked.parse(e.content);
+    //    const html = await marked.parse(e.content);
     const post: Post = {
       type: "post",
       id,
@@ -312,22 +327,14 @@ export class NostrParser {
       show_title_and_feature_image: true,
     };
 
-    // oembed from built-in providers
-    //    await this.fetchOembeds(post);
+    // if (store)
+    //   post.markdown = await this.replaceNostrProfiles(
+    //     store,
+    //     post.nostrLinks,
+    //     post.markdown!
+    //   );
 
-    // replace nostr npub/nprofile links in markdown
-    // with rich "Username" links
-    // FIXME if user pasted link as plaintext then this is fine,
-    // otherwise if link is already [text](url) then
-    // we'll replace it with url-inside-url
-    if (store)
-      post.markdown = await this.replaceNostrProfiles(
-        store,
-        post.nostrLinks,
-        post.markdown!
-      );
-
-    post.markdown = await this.replaceNostrLinks(post, post.markdown!);
+    // post.markdown = await this.replaceNostrLinks(post, post.markdown!);
 
     // images from links
     post.images = this.parseImages(post);
@@ -443,23 +450,21 @@ export class NostrParser {
 
     // replace nostr npub/nprofile links in markdown
     // with rich "Username" links
-    if (store)
-      post.markdown = await this.replaceNostrProfiles(
-        store,
-        post.nostrLinks,
-        content
-      );
+    // if (store)
+    //   post.markdown = await this.replaceNostrProfiles(
+    //     store,
+    //     post.nostrLinks,
+    //     content
+    //   );
 
-    post.markdown = await this.replaceNostrLinks(post, post.markdown);
-
-    // parse markdown to html
-    // post.html = await marked.parse(post.markdown);
-
-    // FIXME remove when it's implemented on the client as plugin
-    // this.embedLinks(post);
+    // post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
     // now cut all links to create a title and excerpt
-    let textContent = content;
+    let textContent = (await new Marked().use(markedPlaintify()).parse(content))
+      // https://github.com/markedjs/marked/discussions/1737#discussioncomment-168391
+      .replace(/&amp;/g, "&")
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"');
 
     // replace nostr npub/nprofile links in textContent
     // with @username texts
@@ -482,10 +487,16 @@ export class NostrParser {
     }
     if (!textContent) textContent = emojiContent;
     for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
-    post.excerpt = downsize(textContent, { words: 50 });
+
     const headline = textContent.trim().split("\n")[0];
-    post.title = downsize(headline, { words: 6 });
+    try {
+      post.excerpt = downsize(textContent, { words: 50 });
+      post.title = downsize(headline, { words: 6 });
+    } catch (e) {
+      console.error("downsize failed", e);
+    }
     if (!post.title || post.title !== headline) post.title += "…";
+    if (post.excerpt && post.excerpt !== textContent) post.excerpt += "…";
 
     // short content (title === content) => empty title?
     // if (content.trim() === post.title?.trim()) post.title = null;
@@ -525,20 +536,25 @@ export class NostrParser {
           npub = nip19.npubEncode(data.pubkey);
         }
 
-        const r = await store.list({
-          type: "profiles",
-          id: npub,
-        });
-        if (r.profiles!.length > 0) {
-          const author = r.profiles![0];
+        const author = (await store.get(npub, "authors", true)) as
+          | Author
+          | undefined;
+        const profile = (await store.get(npub, "profiles", true)) as
+          | Profile
+          | undefined;
+
+        if (profile) {
           // console.log("replacing author", s, author);
-          const name = author.profile?.display_name || author.profile?.name;
+          const name = profile.profile?.display_name || profile.profile?.name;
           if (!name) continue;
 
+          const rx = new RegExp(l, "g");
           if (plainText) {
-            s = s.replace(l, `@${name}`);
+            s = s.replace(rx, `@${name}`);
+          } else if (author) {
+            s = s.replace(rx, `[${name}](${author.url})`);
           } else {
-            s = s.replace(l, `[${name}](https://${NJUMP_DOMAIN}/${npub})`);
+            s = s.replace(rx, `[${name}](https://${NJUMP_DOMAIN}/${npub})`);
           }
         }
       } catch (e) {
@@ -550,77 +566,45 @@ export class NostrParser {
   }
 
   private async replaceNostrLinks(post: Post, s: string) {
+    // make sure all nostr: links are in [link](link) format
+    // to be converted to <a> tags by md=>html
     for (const l of post.nostrLinks) {
-      const id = l.split("nostr:")[1];
-      s = s.replace(
-        l,
-        `[${id.substring(0, 10)}...${id.substring(
-          id.length - 4
-        )}](https://${NJUMP_DOMAIN}/${id})`
-      );
+      s = s.replace(new RegExp(l, "g"), `[${l}](${l})`);
     }
-    return s;
 
-    // console.log("replacing", s, post.nostrLinks);
     // for (const l of post.nostrLinks) {
-    //   if (
-    //     !l.startsWith("nostr:note1") &&
-    //     !l.startsWith("nostr:nevent1") &&
-    //     !l.startsWith("nostr:naddr1")
-    //   )
-    //     continue;
-
-    //   try {
-    //     let id = l.split("nostr:")[1];
-    //     const { type, data } = nip19.decode(id);
-    //     if (type === "nevent") {
-    //       id = nip19.noteEncode(data.id);
-    //     } else if (type === "naddr") {
-    //       id = nip19.naddrEncode({
-    //         identifier: data.identifier,
-    //         kind: data.kind,
-    //         pubkey: data.pubkey,
-    //         // exclude relays
-    //       });
-    //     }
-
-    //     const r = await store.list({
-    //       type: "related",
-    //       id,
-    //     });
-    //     if (r.related!.length > 0) {
-    //       const post = r.related![0];
-    //       console.log("replacing post", s, post);
-    //       const name = post.primary_author?.name
-    //         ? `@${post.primary_author?.name}: `
-    //         : "";
-    //       if (plainText) {
-    //         const text = `\n> ${name}${post.excerpt?.replace("\n", "\n>")}...`;
-    //         s = s.replace(l, text);
-    //       } else {
-    //         const millis = Date.parse(post.published_at!);
-    //         const date = DateTime.fromMillis(millis).toFormat("LLL dd, yyyy");
-    //         const text = `\n> ${name}${post.excerpt?.replace(
-    //           "\n",
-    //           "\n>"
-    //         )}...\n[${date}](https://njump.me/${id})`;
-    //         s = s.replace(l, text);
-    //       }
-    //     }
-    //   } catch (e) {
-    //     console.log("bad nostr link", l, e);
+    //   const id = l.split("nostr:")[1];
+    //   const linked = (await store.get(id, "posts", true)) as Post | undefined;
+    //   // console.log("nostr link post", post.id, "link", id, linked);
+    //   let url = `https://${NJUMP_DOMAIN}/${id}`;
+    //   let anchor = `${id.substring(0, 10)}...${id.substring(id.length - 4)}`;
+    //   if (linked) {
+    //     url = linked.url;
+    //     // NOTE: make sure anchor is same,
+    //     // this will signal to 'embedLinks' below to replace
+    //     // it with embed code
+    //     anchor = url;
     //   }
+    //   s = s.replace(new RegExp(l, "g"), `[${anchor}](${url})`);
     // }
-
-    // return s;
+    return s;
   }
 
-  public async prepareHtml(post: Post) {
-    post.html = await marked.parse(post.markdown || "");
-    this.embedLinks(post);
+  public async prepareHtml(post: Post, store: Store) {
+    post.markdown = await this.replaceNostrProfiles(
+      store,
+      post.nostrLinks,
+      post.markdown!
+    );
+
+    post.markdown = await this.replaceNostrLinks(post, post.markdown);
+
+    post.html = await marked.parse(post.markdown);
+
+    await this.embedLinks(store, post);
   }
 
-  private embedLinks(post: Post) {
+  private async embedLinks(store: Store, post: Post) {
     // ok so we arrive to post.html from markdown or plaintext
     // with nostr-links replaced w/ njump.
 
@@ -639,12 +623,7 @@ export class NostrParser {
     const dom = loadHtml(post.html!);
 
     // convert nostr links to njump links
-    const allLinks = [
-      ...post.links,
-      ...post.nostrLinks.map(
-        (l) => `https://${NJUMP_DOMAIN}/${l.split("nostr:")[1]}`
-      ),
-    ];
+    const allLinks = [...post.links, ...post.nostrLinks];
 
     // replace media links
     for (const url of allLinks) {
@@ -662,7 +641,11 @@ export class NostrParser {
       // and it's not clear how we have to reimplement it here...
       const nodes = dom(`a[href="${url}"]`);
       // console.log("nodes", `a[href="${url}"]`, nodes);
+      const elements: any[] = [];
       nodes.each((_: number, el: any) => {
+        elements.push(el);
+      });
+      for (const el of elements) {
         const node = dom(el);
         let replace = false;
         if (code) {
@@ -670,48 +653,47 @@ export class NostrParser {
           // aren't replaced, bcs anchor would be lost, which user definitely
           // didn't want
           replace = node.text() === url;
-        } else {
-          // web/nostr link
-          try {
-            const u = new URL(url);
-            if (u.hostname === NJUMP_DOMAIN) {
-              // nostr link
-              const id = u.pathname.split("/")[1];
-              // console.log("embed njump", id);
-              if (
-                id.startsWith("note1") ||
-                id.startsWith("nevent1") ||
-                id.startsWith("naddr1") ||
-                id.startsWith("npub1") ||
-                id.startsWith("nprofile1")
-              ) {
-                code = `<np-embed nostr='${id}'>${node.prop(
-                  "outerHTML"
-                )}</np-embed>`;
-                // njump links are replaced unconditionally, bcs
-                // we ourselves set profiles' anchors to usernames,
-                // and so we can't distinguish btw markdown-provided
-                // anchor or our own.
-                // const a = node.text().split("...");
-                replace = true; // a.length === 2 && id.startsWith(a[0]) && id.endsWith(a[1]);
-              }
+        } else if (url.startsWith("nostr:")) {
+          // nostr link
+          const id = url.split("nostr:")[1];
+          if (
+            id.startsWith("note1") ||
+            id.startsWith("nevent1") ||
+            id.startsWith("naddr1") ||
+            id.startsWith("npub1") ||
+            id.startsWith("nprofile1")
+          ) {
+            const linked = (await store.get(id, "posts", true)) as
+              | Post
+              | undefined;
+
+            // we're about to modify the text
+            replace = node.text() === url;
+
+            if (linked) {
+              // make sure we're linking to our internal page
+              node.attr("href", linked.url);
+              // also make the title look nice
+              if (linked.title) node.text(linked.title);
             } else {
-              // web link
-              code = `<np-embed url='${url}'>${node.prop(
-                "outerHTML"
-              )}</np-embed>`;
-              replace = node.text() === url;
-              // console.log("web link replace", replace, url, '"'+node+'"', code);
+              // make it a link to njump
+              node.attr("href", `https://${NJUMP_DOMAIN}/${id}`);
             }
-          } catch (e) {
-            console.log("Bad link", url, e);
+
+            code = `<np-embed nostr='${id}'>${node.prop(
+              "outerHTML"
+            )}</np-embed>`;
           }
+        } else {
+          // web link
+          code = `<np-embed url='${url}'>${node.prop("outerHTML")}</np-embed>`;
+          replace = node.text() === url;
+          // console.log("web link replace", replace, url, '"'+node+'"', code);
         }
 
         // console.log("embed url", replace, url, node.html(), node.text(), code);
         if (code && replace) node.replaceWith(code);
-
-      });
+      }
     }
 
     // done
@@ -736,11 +718,17 @@ export class NostrParser {
 
   public parseProfile(e: NDKEvent): Profile {
     const id = profileId(e);
+    let profile = undefined;
+    try {
+      profile = JSON.parse(e.content);
+    } catch (er) {
+      console.warn("bad profile", e, er);
+    }
     return {
       id,
       slug: id,
       pubkey: e.pubkey,
-      profile: JSON.parse(e.content),
+      profile,
       event: e,
     };
   }

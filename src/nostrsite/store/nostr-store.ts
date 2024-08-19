@@ -11,16 +11,18 @@ import {
   BLACKLISTED_RELAYS,
   KIND_LONG_NOTE,
   KIND_NOTE,
-  KIND_PACKAGE,
   KIND_PROFILE,
-  KIND_SITE,
+  MAX_OBJECTS_IIFE,
+  MAX_OBJECTS_PREVIEW,
+  MAX_OBJECTS_SSR,
+  MAX_OBJECTS_SW,
+  MAX_OBJECTS_TAB,
   OUTBOX_RELAYS,
   SUPPORTED_KINDS,
 } from "../consts";
 import { NostrParser } from "../parser/parser";
 import { Tag } from "../types/tag";
-import { recommendations } from "./sample-recommendations";
-import { Profile } from "../types/profile";
+// import { recommendations } from "./sample-recommendations";
 import { Post } from "../types/post";
 import { StoreObject } from "../types/store";
 import { matchFilter, nip19 } from "nostr-tools";
@@ -29,14 +31,14 @@ import { DbEvent, dbi } from "./db";
 import {
   PromiseQueue,
   RenderMode,
+  eventId,
   fetchEvent,
   fetchEvents,
   fetchRelays,
   profileId,
   tags,
 } from "..";
-
-const MAX_OBJECTS = 10000;
+import { scanRelays } from "../..";
 
 export class NostrStore extends RamStore {
   private mode: RenderMode;
@@ -44,7 +46,7 @@ export class NostrStore extends RamStore {
   private settings: Site;
   private parser: NostrParser;
   private filters: NDKFilter[];
-  private maxObjects: number = MAX_OBJECTS;
+  private maxObjects: number = 0;
   private subs: NDKSubscription[] = [];
   private fetchedRelays?: boolean;
   private getUrlCb?: (o: StoreObject) => string;
@@ -73,8 +75,10 @@ export class NostrStore extends RamStore {
   public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
     if (e.kind === KIND_PROFILE) return false;
     if (e.kind === KIND_NOTE) {
-      if (e.tags.find((t) => t.length >= 2 && t[0] === "e")) {
-        console.log("skip reply event", e.id);
+      if (
+        e.tags.find((t) => t.length >= 4 && t[0] === "e" && t[3] === "root")
+      ) {
+        // console.log("skip reply event", e.id, e.pubkey);
         return false;
       }
     }
@@ -86,18 +90,22 @@ export class NostrStore extends RamStore {
   private async loadFromDb(limit: number) {
     const events = await dbi.listEvents(limit);
 
+    // NOTE: it's hard to know which events are 'related'
+    // and which belong to the site, so we just rely on
+    // matchObject below to filter, and don't try to clean
+    // up the db.
     // @ts-ignore
-    const badObjectIds: string[] = events
-      .filter(
-        (e) =>
-          e.kind !== KIND_SITE &&
-          e.kind !== KIND_PACKAGE &&
-          e.kind !== KIND_PROFILE &&
-          !this.matchObject(e)
-      )
-      .map((e) => e.id);
-    // console.log("badObjectIds", badObjectIds);
-    await dbi.deleteEvents(badObjectIds);
+    // const badObjectIds: string[] = events
+    //   .filter(
+    //     (e) =>
+    //       e.kind !== KIND_SITE &&
+    //       e.kind !== KIND_PACKAGE &&
+    //       e.kind !== KIND_PROFILE &&
+    //       !this.matchObject(e)
+    //   )
+    //   .map((e) => e.id);
+    // // console.log("badObjectIds", badObjectIds);
+    // await dbi.deleteEvents(badObjectIds);
 
     const objects = events.filter((e) => this.matchObject(e));
     await this.parseEvents(objects.map((e) => new NDKEvent(this.ndk, e)));
@@ -134,68 +142,81 @@ export class NostrStore extends RamStore {
     // one try only
     this.fetchedRelays = true;
 
+    // NOTE: we expect fetchRelays to provide a good small set
+    // of relays for each contributor
+    let maxRelays = 6;
+    switch (this.mode) {
+      case "iife":
+      case "preview":
+        maxRelays = 3;
+        break;
+    }
+
     // fetch relays for contributors
     const { write, read } = await fetchRelays(
       this.ndk,
-      this.settings.contributor_pubkeys
+      this.settings.contributor_pubkeys,
+      maxRelays
     );
 
     this.settings.contributor_relays = write;
     this.settings.contributor_inbox_relays = read;
 
-    // limit number of relays if we care about latency
-    if (this.mode === "iife" || this.mode === "preview")
-      this.settings.contributor_relays.length = Math.min(
-        this.settings.contributor_relays.length,
-        5
-      );
+    // // limit number of relays if we care about latency
+    // if (this.mode === "iife" || this.mode === "preview")
+    //   this.settings.contributor_relays.length = Math.min(
+    //     this.settings.contributor_relays.length,
+    //     5
+    //   );
 
     console.log("contributor outbox relays", this.settings.contributor_relays);
   }
 
-  private async fetchObjects(since?: number, until?: number, sub?: boolean) {
-    console.warn(Date.now(), "fetch objects", since, until, sub);
+  // private async fetchObjects(
+  //   relay: string,
+  //   since?: number,
+  //   until?: number,
+  //   sub?: boolean
+  // ) {
+  //   console.warn(Date.now(), "fetch objects", since, until, sub);
 
-    // ensure relays are known
-    await this.fetchRelays();
+  //   const promises: Promise<number | undefined>[] = [];
 
-    const promises: Promise<number | undefined>[] = [];
+  //   if (this.settings.include_all || !!this.settings.include_tags?.length) {
+  //     promises.push(this.fetchByFilter(since, until, sub));
+  //   } else {
+  //     console.warn("No include tags specified!");
+  //   }
 
-    if (this.settings.include_all || !!this.settings.include_tags?.length) {
-      promises.push(this.fetchByFilter(since, until, sub));
-    } else {
-      console.warn("No include tags specified!");
-    }
+  //   // if (this.settings.include_manual) {
+  //   //   promises.push(this.fetchManual(since, until, sub));
+  //   // }
 
-    // if (this.settings.include_manual) {
-    //   promises.push(this.fetchManual(since, until, sub));
-    // }
+  //   const results = await Promise.all(promises);
+  //   const newUntil = results.reduce(
+  //     (pv, cv) => (!cv ? pv : pv ? Math.min(cv, pv) : cv),
+  //     until
+  //   );
 
-    const results = await Promise.all(promises);
-    const newUntil = results.reduce(
-      (pv, cv) => (!cv ? pv : pv ? Math.min(cv, pv) : cv),
-      until
-    );
+  //   console.warn(
+  //     Date.now(),
+  //     "fetched objects",
+  //     since,
+  //     until,
+  //     "=>",
+  //     newUntil,
+  //     sub
+  //   );
 
-    console.warn(
-      Date.now(),
-      "fetched objects",
-      since,
-      until,
-      "=>",
-      newUntil,
-      sub
-    );
-
-    return newUntil;
-  }
+  //   return newUntil;
+  // }
 
   private async loadIife() {
     // a fast method to get some usable set of events
 
     // load some posts from db and
+    const since = await this.loadFromDb(this.maxObjects * 10);
     // fetch since latest in db until now
-    const since = await this.loadFromDb(100);
     await this.fetchAllObjects(this.maxObjects, since);
   }
 
@@ -204,37 +225,150 @@ export class NostrStore extends RamStore {
     await this.fetchAllObjects(this.maxObjects);
   }
 
-  private async fetchAllObjects(max: number = 0, since: number = 0) {
-    console.log(Date.now(), "start sync, max", max);
-    let until = 0;
-    let reqsLeft = 30; // 30*300=10k
-    do {
-      // const was_count = this.posts.length;
-      const newUntil = await this.fetchObjects(since, until);
+  private async getRelays() {
+    // ensure relays are known
+    await this.fetchRelays();
 
-      // if (this.posts.length === was_count) {
-      //   console.log("stop sync, end");
-      //   break;
-      // }
-
-      // const newUntil = this.posts
-      //   .map((p) => p.event.created_at)
-      //   .reduce((last, current) => Math.min(last, current), until);
-      console.log("newUntil", newUntil);
-      if (!newUntil) {
-        console.log("stop sync, end");
-        break;
-      }
-      if (newUntil === until) {
-        console.log("stop sync, same cursor", newUntil);
-        break;
-      }
-      until = newUntil!;
-      --reqsLeft;
-    } while (this.posts.length < max && reqsLeft > 0);
-
-    console.log(Date.now(), "done sync, posts", this.posts.length);
+    // use admin relays if contributor relays are empty
+    return this.settings.contributor_relays || this.settings.admin_relays;
   }
+
+  private async subscribeOnNewEvents(since: number) {
+    const relays = await this.getRelays();
+    if (this.settings.include_all || !!this.settings.include_tags?.length) {
+      await this.fetchByFilter(relays, since, 0, true);
+    }
+  }
+
+  private async fetchAllObjects(
+    max: number = 0,
+    since: number = 0,
+    until: number = 0,
+    slow = false
+  ) {
+    if (this.isOffline()) return;
+
+    const relays = await this.getRelays();
+    console.log(Date.now(), "sync start max", max, relays);
+
+    const timeout =
+      this.mode === "iife" ||
+      this.mode === "preview" ||
+      (this.mode === "ssr" && max <= 500) // index.html
+        ? 3000
+        : 10000;
+    const threads = slow ? 5 : this.mode === "ssr" ? 50 : 15;
+
+    let promises = [];
+    if (this.settings.include_all || !!this.settings.include_tags?.length) {
+      promises.push(
+        (async () => {
+          await scanRelays(this.ndk, this.createTagFilters(), relays, max, {
+            matcher: (e) => this.matchObject(e),
+            onBatch: async (events) => {
+              await this.storeEvents(events);
+              await this.parseEvents(events);
+              await this.processBatch();
+              console.warn(
+                Date.now(),
+                "scan batch events",
+                events.length,
+                "posts",
+                this.posts.length
+              );
+            },
+            since,
+            until,
+            timeout,
+            threads,
+          });
+        })()
+      );
+      // for (const relay of relays) {
+      //   promises.push(
+      //     this.scanRelayPosts(
+      //       relay,
+      //       max,
+      //       since,
+      //       this.fetchByFilterFromRelay.bind(this)
+      //     )
+      //   );
+      // }
+    }
+
+    // scan all relays in parallel, track until cursor
+    // on each relay separately to make sure we scan them
+    // properly
+    await Promise.all(promises);
+
+    // let until = 0;
+    // let reqsLeft = 30; // 30*300=10k
+    // do {
+    //   // const was_count = this.posts.length;
+    //   const newUntil = await this.fetchObjects(since, until);
+
+    //   // if (this.posts.length === was_count) {
+    //   //   console.log("stop sync, end");
+    //   //   break;
+    //   // }
+
+    //   // const newUntil = this.posts
+    //   //   .map((p) => p.event.created_at)
+    //   //   .reduce((last, current) => Math.min(last, current), until);
+    //   console.log("newUntil", newUntil);
+    //   if (!newUntil) {
+    //     console.log("stop sync, end");
+    //     break;
+    //   }
+    //   if (newUntil === until) {
+    //     console.log("stop sync, same cursor", newUntil);
+    //     break;
+    //   }
+    //   until = newUntil!;
+    //   --reqsLeft;
+    // } while (this.posts.length < max && reqsLeft > 0);
+
+    console.log(Date.now(), "sync done all posts", this.posts.length);
+  }
+
+  // private async scanRelayPosts(
+  //   relay: string,
+  //   max: number = 0,
+  //   since: number = 0,
+  //   fetcher: (
+  //     relay: string,
+  //     since: number,
+  //     until: number
+  //   ) => Promise<number | undefined>
+  // ) {
+  //   console.log(Date.now(), "sync start", relay, max, since);
+
+  //   let until = 0;
+  //   let reqsLeft = 30; // 30*300=10k
+  //   do {
+  //     // const was_count = this.posts.length;
+  //     const newUntil = await fetcher(relay, since, until);
+  //     console.log(
+  //       "sync next until",
+  //       relay,
+  //       newUntil,
+  //       "posts",
+  //       this.posts.length
+  //     );
+  //     if (!newUntil) {
+  //       console.log("sync end", relay);
+  //       break;
+  //     }
+  //     if (newUntil === until) {
+  //       console.log("sync stop same cursor", relay, newUntil);
+  //       break;
+  //     }
+  //     until = newUntil!;
+  //     --reqsLeft;
+  //   } while (this.posts.length < max && reqsLeft > 0);
+
+  //   console.log(Date.now(), "sync done", relay);
+  // }
 
   private async loadSw() {
     const since = await this.loadFromDb(this.maxObjects);
@@ -243,14 +377,37 @@ export class NostrStore extends RamStore {
     const sync = await dbi.getSync();
     const synced = sync && sync.site_id === this.settings.event.id;
 
-    // sync from since
-    await this.fetchAllObjects(this.maxObjects, synced ? since : 0);
+    if (synced) {
+      // sync forward from since
+      await this.fetchAllObjects(this.maxObjects, since);
+    } else {
+      // NOTE: instead of this pre-sync, which essentially loads
+      // the same stuff that iife mode has just loaded, we assume sw
+      // is ready and just do the full background sync until the
+      // already-loaded post
+      if (!this.posts.length) {
+        // only do if iife failed
+        // pre-sync 10%
+        await this.fetchAllObjects(100);
+      }
 
-    // mark as synced
-    if (!synced) await dbi.setSync(this.settings.event.id!);
+      // iife has already loaded some recent posts and written them to db,
+      // now we should do full sync until the oldest of the recent posts
+      const until = this.posts
+        .map((p) => p.event.created_at!)
+        .reduce((pv, cv) => Math.min(pv, cv), now);
+
+      console.log("sync sw until", until);
+
+      // full bg sync since oldest object
+      this.fetchAllObjects(this.maxObjects, 0, until, true).then(async () => {
+        // mark as synced
+        await dbi.setSync(this.settings.event.id!);
+      });
+    }
 
     // sync forward from 'since'
-    await this.fetchObjects(now, 0, true);
+    this.subscribeOnNewEvents(now);
   }
 
   private async loadSsr() {
@@ -266,11 +423,33 @@ export class NostrStore extends RamStore {
     else await this.fetchRelays();
   }
 
+  private getMaxObjects() {
+    switch (this.mode) {
+      case "iife":
+        return MAX_OBJECTS_IIFE;
+      case "preview":
+        return MAX_OBJECTS_PREVIEW;
+      case "ssr":
+        return MAX_OBJECTS_SSR;
+      case "sw":
+        return MAX_OBJECTS_SW;
+      case "tab":
+        return MAX_OBJECTS_TAB;
+    }
+  }
+
+  private async processBatch() {
+    await this.fetchContributors();
+    await this.assignAuthors();
+    await this.postProcess();
+
+    // assign urls, prepare html
+    await this.prepare();
+  }
+
   public async load(maxObjects: number = 0) {
     if (maxObjects) this.maxObjects = maxObjects;
-
-    // FIXME for testing
-    this.recommendations = recommendations;
+    else this.maxObjects = this.getMaxObjects();
 
     if (this.mode === "iife") {
       await this.loadIife();
@@ -284,11 +463,7 @@ export class NostrStore extends RamStore {
       await this.loadTab();
     }
 
-    await this.fetchContributors();
-
-    await this.assignAuthors();
-
-    await this.postProcess();
+    await this.processBatch();
 
     console.log("store posts", this.posts);
     console.log("store tags", this.tags);
@@ -303,26 +478,35 @@ export class NostrStore extends RamStore {
     if (!getUrl) getUrl = this.getUrlCb;
     this.getUrlCb = getUrl;
 
-    this.posts.forEach(async (post) => {
-      post.url = getUrl!(post);
-      if (!post.html) await this.parser.prepareHtml(post);
-    });
-    this.tags.forEach((tag) => {
+    // noop if not yet provided with getUrl callback
+    if (!getUrl) return;
+
+    // assign urls first
+    for (const tag of this.tags) {
       tag.url = getUrl!(tag);
-    });
-    this.authors.forEach((author) => {
+    }
+    for (const author of this.authors) {
       author.url = getUrl!(author);
-    });
+    }
+    for (const post of this.posts) {
+      post.url = getUrl!(post);
+    }
+
+    // prepare html second
+    for (const post of this.posts) {
+      if (!post.html) await this.parser.prepareHtml(post, this);
+    }
   }
 
   private async storeEvents(events: NDKEvent[]) {
     // no caching for ssr for now
-    if (this.mode === "ssr" || this.mode === "preview") return;
+    if (!this.useCache()) return;
 
-    const promise = dbi.addEvents(events);
+    //const promise =
+    await dbi.addEvents(events);
 
     // block if we're not in tab rendering mode
-    if (this.mode !== "iife") await promise;
+    //if (this.mode !== "iife" && this.mode !== "tab") await promise;
   }
 
   private async parsePostTags(post: Post, e: NDKEvent) {
@@ -372,13 +556,16 @@ export class NostrStore extends RamStore {
     );
   }
 
-  private async fetchNostrLinks(events: NDKEvent[]) {
-    console.log("fetchNostrLinks", events.length, events);
+  // NOTE: we only auto-fetch profiles for all the
+  // nostr: links, these can't result in infinite
+  // recursion and can work for SSR, resolving
+  // of note links is done on the client when
+  // rendering each specific page to limit the number
+  // of events to be fetched
+  private async fetchProfileLinks(events: NDKEvent[]) {
+    console.log("fetchProfileLinks", events.length, events);
     const pubkeys: string[] = [];
     const relays: string[] = [];
-    // const preAddrs: nip19.AddressPointer[] = [];
-    // const reAddrs: nip19.AddressPointer[] = [];
-    // const ids: string[] = [];
 
     // parse event tags
     for (const e of events) {
@@ -388,25 +575,6 @@ export class NostrStore extends RamStore {
         pubkeys.push(p[1]);
         if (p.length > 2 && p[2].startsWith("wss://")) relays.push(p[2]);
       }
-      // for (const t of tags(e, "e")) {
-      //   if (t[1].length !== 64) continue;
-      //   ids.push(t[1]);
-      //   if (t.length > 2 && t[2].startsWith("wss://")) relays.push(t[2]);
-      // }
-      // for (const a of tags(e, "a")) {
-      //   const fs = a[1].split(":");
-      //   if (fs.length !== 3 || fs[1].length !== 64) continue;
-      //   try {
-      //     (fs[2] ? preAddrs : reAddrs).push({
-      //       kind: parseInt(fs[0]),
-      //       pubkey: fs[1],
-      //       identifier: fs[2],
-      //     });
-      //   } catch {
-      //     continue;
-      //   }
-      //   if (a.length > 2 && a[2].startsWith("wss://")) relays.push(a[2]);
-      // }
     }
 
     // parse content links (those might not match tags)
@@ -427,7 +595,7 @@ export class NostrStore extends RamStore {
         return [];
       })
       .flat();
-    console.log("nostr links", events, links);
+    console.log("nostr profile links", events, links);
 
     links.forEach((id) => {
       try {
@@ -440,76 +608,28 @@ export class NostrStore extends RamStore {
             pubkeys.push(data.pubkey);
             relays.push(...(data.relays || []));
             break;
-          // case "naddr":
-          //   (data.identifier ? preAddrs : reAddrs).push(data);
-          //   relays.push(...(data.relays || []));
-          //   break;
-          // case "nevent":
-          //   ids.push(data.id);
-          //   relays.push(...(data.relays || []));
-          //   break;
-          // case "note":
-          //   ids.push(data);
-          //   break;
         }
       } catch {}
     });
 
-    // console.log("linked", { pubkeys, ids, preAddrs, reAddrs, relays });
-    console.log("linked", { pubkeys, relays });
+    console.log("linked profiles", { pubkeys, relays });
 
-    // linked profiles
-    if (pubkeys.length) await this.fetchProfiles(pubkeys, relays);
+    let nonCached = [];
+    for (const pubkey of pubkeys) {
+      if (!this.profiles.find((p) => p.pubkey === pubkey))
+        nonCached.push(pubkey);
+    }
 
-    // // linked events
-    // const filters = [];
-    // if (ids.length) filters.push({ ids });
-    // if (preAddrs.length)
-    //   filters.push({
-    //     authors: preAddrs.map((a) => a.pubkey),
-    //     kinds: preAddrs.map((a) => a.kind),
-    //     "#d": preAddrs.map((a) => a.identifier),
-    //   });
-    // if (reAddrs.length)
-    //   filters.push({
-    //     authors: preAddrs.map((a) => a.pubkey),
-    //     kinds: preAddrs.map((a) => a.kind),
-    //   });
+    // nothing to fetch
+    if (!nonCached.length) return;
 
-    // if (filters.length) {
-    //   relays.push(
-    //     ...this.settings.contributor_relays,
-    //     ...this.settings.contributor_inbox_relays
-    //   );
-    //   const linkedEvents = await fetchEvents(this.ndk, filters, relays, 3000);
-    //   console.log("linked events", { filters, linkedEvents });
-
-    //   // fetch authors
-    //   await this.fetchNostrLinks([...linkedEvents], true);
-
-    //   for (const e of linkedEvents) {
-    //     const post = await this.parser.parseEvent(e, this);
-    //     if (!post) continue;
-
-    //     const existing = this.related.find((p) => p.id === post!.id);
-    //     if (existing && existing.event.created_at > post.event.created_at)
-    //       continue;
-
-    //     if (existing)
-    //       this.related.splice(
-    //         this.related.findIndex((r) => r === existing),
-    //         1
-    //       );
-
-    //     console.log("related", post);
-    //     this.related.push(post);
-    //   }
-    // }
+    // fetch new profiles
+    await this.fetchProfiles(nonCached, relays);
   }
 
-  private async parseEvents(events: NDKEvent[]) {
+  private async parseEvents(events: NDKEvent[], related: boolean = false) {
     // pre-parse and fetch all linked events
-    await this.fetchNostrLinks(events);
+    await this.fetchProfileLinks(events);
 
     // now when linked events are cached we can
     // parse events and use linked events to
@@ -518,24 +638,28 @@ export class NostrStore extends RamStore {
       const post = await this.parser.parseEvent(e, this);
       if (!post) continue;
 
+      const list = related ? this.related : this.posts;
+
       // replaceable events
-      const existing = this.posts.find((p) => p.id === post!.id);
+      const existing = list.find((p) => p.id === post!.id);
       if (existing && existing.event.created_at > post.event.created_at)
         continue;
 
-      // drop existing post, we're replacing it with a new version
-      if (existing) this.removePost(existing);
+      if (!related) {
+        // drop existing post, we're replacing it with a new version
+        if (existing) this.removePost(existing);
 
-      // make sure it has unique slug
-      if (this.posts.find((p) => p.slug === post!.slug)) post.slug = post.id;
+        // make sure it has unique slug
+        if (this.posts.find((p) => p.slug === post!.slug)) post.slug = post.id;
 
-      // hashtags
-      this.parsePostTags(post, e);
+        // hashtags
+        this.parsePostTags(post, e);
+      }
 
       // put to local storage
-      this.posts.push(post);
+      list.push(post);
 
-      console.debug("post", post);
+      console.debug(related ? "related" : "post", post);
     }
   }
 
@@ -573,7 +697,7 @@ export class NostrStore extends RamStore {
     this.tags.sort((a, b) => b.postIds.length - a.postIds.length);
 
     // sort posts desc by update time
-    this.posts.sort((a, b) => { 
+    this.posts.sort((a, b) => {
       if (a.published_at === b.published_at) return 0;
       if (b.published_at! < a.published_at!) return -1;
       return 1;
@@ -614,6 +738,60 @@ export class NostrStore extends RamStore {
         post.authors.push(author);
       }
     }
+  }
+
+  protected async fetchRelated(ids: string[], relayHints: []) {
+    console.log("fetchRelated", ids);
+
+    const events: NDKEvent[] = [];
+    if (this.useCache()) {
+      const cached = await dbi.listEventsByIds(ids);
+      console.log("cached related", cached);
+      events.push(...cached.map((e) => new NDKEvent(this.ndk!, e)));
+      ids = ids.filter((id) => !cached.find((c) => eventId(c) === id));
+    }
+
+    const idFilter: NDKFilter = { ids: [] };
+    const naddrFilters: NDKFilter[] = [];
+
+    for (const id of ids) {
+      // NOTE: ids are expected to have been `normalizeId`-ed
+      const { type, data } = nip19.decode(id);
+      switch (type) {
+        case "note":
+          idFilter.ids!.push(data);
+          break;
+        case "naddr":
+          naddrFilters.push({
+            kinds: [data.kind],
+            authors: [data.pubkey],
+            "#d": [data.identifier],
+          });
+          break;
+        default:
+          throw new Error("Invalid related id " + id);
+      }
+    }
+
+    const filters: NDKFilter[] = [...naddrFilters];
+    if (idFilter.ids!.length) filters.push(idFilter);
+
+    if (filters.length) {
+      const relays = [
+        ...relayHints.filter((r) => !BLACKLISTED_RELAYS.includes(r)),
+        ...this.settings.contributor_relays,
+        ...this.settings.contributor_inbox_relays,
+      ];
+
+      const newEvents = await fetchEvents(this.ndk, filters, relays, 3000);
+      console.log("fetchRelated got", ids, newEvents);
+
+      await this.storeEvents([...newEvents]);
+
+      events.push(...newEvents);
+    }
+
+    await this.parseEvents([...events], /*related=*/ true);
   }
 
   protected async fetchObject(
@@ -671,8 +849,8 @@ export class NostrStore extends RamStore {
     if (!event || !this.matchObject(event.rawEvent())) return undefined;
 
     await this.parseEvents([event]);
-
-    await this.prepare();
+    await this.storeEvents([event]);
+    await this.processBatch();
   }
 
   private useCache() {
@@ -685,13 +863,11 @@ export class NostrStore extends RamStore {
       (pubkey) => !this.profiles.find((p) => p.pubkey === pubkey)
     );
 
-    const cachedEvents = this.useCache()
-      ? await dbi.listKindEvents(KIND_PROFILE, 100)
-      : [];
+    const cachedEvents = this.useCache() ? await dbi.listProfiles(pubkeys) : [];
     const profiles = cachedEvents
       .filter((e) => pubkeys.includes(e.pubkey))
       .map((e) => new NDKEvent(this.ndk, e));
-    console.log("cached profiles", profiles);
+    console.log("cached profiles", profiles, pubkeys);
 
     const nonCachedPubkeys = [
       ...new Set(pubkeys.filter((p) => !profiles.find((e) => e.pubkey === p))),
@@ -708,21 +884,23 @@ export class NostrStore extends RamStore {
         this.ndk,
         {
           kinds: [KIND_PROFILE],
-          authors: pubkeys,
+          authors: nonCachedPubkeys,
         },
         relays,
         1000 // timeoutMs
       );
       console.log("fetched profiles", { events, relays });
-      if (events) profiles.push(...events);
+      if (events) {
+        profiles.push(...events);
+
+        await this.storeEvents([...events]);
+      }
       // NOTE: links in bio are non-standard, and it's
       // an infinite loop here (fetching profiles that link
       // to each other won't finish), we should implement
       // a cache for these linked events before we try this
       // await this.fetchNostrLinks([...events]);
     }
-
-    await this.storeEvents([...profiles]);
 
     this.parseProfiles([...profiles]);
   }
@@ -749,9 +927,9 @@ export class NostrStore extends RamStore {
     const add = (kind: number, tag?: { tag: string; value: string }) => {
       const tagKey = "#" + tag?.tag;
       // reuse filters w/ same tag
-      let f: NDKFilter | undefined = filters.find(f => {
-        if (!f.kinds?.includes(kind)) return false;
-        if (!tag) return !Object.keys(f).find(k => k.startsWith("#"))
+      let f: NDKFilter | undefined = filters.find((f) => {
+        // if (!f.kinds?.includes(kind)) return false;
+        if (!tag) return !Object.keys(f).find((k) => k.startsWith("#"));
         else return tagKey in f;
       });
 
@@ -761,7 +939,7 @@ export class NostrStore extends RamStore {
           authors: this.settings.contributor_pubkeys,
           kinds: [kind],
           limit,
-        }
+        };
         if (tag) {
           // @ts-ignore
           f[tagKey] = [tag.value];
@@ -784,8 +962,7 @@ export class NostrStore extends RamStore {
             f[tagKey].push(tag.value);
           }
         }
-        if (!f.kinds!.includes(kind))
-          f.kinds!.push(kind);
+        if (!f.kinds!.includes(kind)) f.kinds!.push(kind);
       }
     };
 
@@ -822,7 +999,16 @@ export class NostrStore extends RamStore {
     return offline;
   }
 
+  // private async fetchByFilterFromRelay(
+  //   relay: string,
+  //   since?: number,
+  //   until?: number
+  // ) {
+  //   return this.fetchByFilter([relay], since, until);
+  // }
+
   private async fetchByFilter(
+    relays: string[],
     since?: number,
     until?: number,
     subscribe?: boolean
@@ -835,9 +1021,6 @@ export class NostrStore extends RamStore {
       return until;
     }
 
-    const relays = [
-      ...(this.settings.contributor_relays || this.settings.admin_relays),
-    ].filter((r) => !BLACKLISTED_RELAYS.includes(r));
     console.warn("fetchByFilter", since, until, subscribe, relays, filters);
 
     let eose = false;
@@ -863,17 +1046,30 @@ export class NostrStore extends RamStore {
           : 10000;
 
       const timeout = setTimeout(() => {
-        console.warn("fetchByFilter timeout");
+        console.warn(
+          "fetchByFilter timeout",
+          timeoutMs,
+          filters,
+          since,
+          until,
+          relays
+        );
         onEose();
       }, timeoutMs);
 
       const onEose = async () => {
         if (timeout) clearTimeout(timeout);
         if (eose) return; // timeout
+
+        // events.sort((a, b) => b.created_at! - a.created_at!);
+        // console.warn(Date.now(), "fetchByFilter end", since, until, [
+        //   ...events,
+        // ]);
+
         eose = true;
         if (!subscribe) sub.stop();
 
-        console.log("events", { events, filters, relays });
+        // console.log("events", { events, filters, relays });
         await this.storeEvents(events);
         await this.parseEvents(events);
         ok(newUntil);
@@ -889,12 +1085,7 @@ export class NostrStore extends RamStore {
           if (this.matchObject(e)) {
             await this.storeEvents([e]);
             await this.parseEvents([e]);
-
-            // ensure we load profiles
-            await this.assignAuthors();
-
-            //
-            await this.postProcess();
+            await this.processBatch();
           }
         } else {
           if (this.matchObject(e)) events.push(e);
@@ -912,8 +1103,4 @@ export class NostrStore extends RamStore {
   // private async fetchManual(_: number) {
   //   // FIXME implement
   // }
-
-  public getProfile(pubkey: string): Profile | undefined {
-    return this.profiles.find((p) => p.pubkey === pubkey);
-  }
 }

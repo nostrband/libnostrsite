@@ -1,5 +1,6 @@
 import { CANCEL_LINK_PARTIAL } from "./cancel_link";
 import { CONTENT_CTA_PARTIAL } from "./content-cta";
+import { EMBED_EVENT_PARTIAL } from "./embed-event";
 import { EMBED_URL_PARTIAL } from "./embed-url";
 import { NAVIGATION_PARTIAL } from "./navigation";
 import { PAGINATION_PARTIAL } from "./pagination";
@@ -14,4 +15,5 @@ export const DEFAULT_PARTIALS: any = {
   "pagination.hbs": PAGINATION_PARTIAL,
   "recommendations.hbs": RECOMMENDATION_PARTIAL,
   "embed-url.hbs": EMBED_URL_PARTIAL,
+  "embed-event.hbs": EMBED_EVENT_PARTIAL,
 };

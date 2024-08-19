@@ -1,5 +1,7 @@
 import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import Dexie from "dexie";
+import { KIND_PROFILE } from "..";
+import { nip19 } from "nostr-tools";
 
 export interface DbSite {
   key: "site";
@@ -37,9 +39,9 @@ export interface DbSchema extends Dexie {
 
 const db = new Dexie("cache_npub_pro") as DbSchema;
 
-db.version(4).stores({
+db.version(5).stores({
   site: "key,site_id,created_at",
-  events: "id,pubkey,kind,created_at,d_tag",
+  events: "id,pubkey,kind,created_at,d_tag,[kind+pubkey+d_tag]",
   sync: "site_id",
   cache: "id",
 });
@@ -94,6 +96,7 @@ export const dbi = {
         sig: e.sig || "",
         d_tag: e.tags.find((t) => t.length >= 2 && t[0] === "d")?.[1] || "",
       }));
+      console.log("db adding", dbEvents);
 
       await db.events.bulkPut(dbEvents);
     } catch (error) {
@@ -105,6 +108,44 @@ export const dbi = {
       return (await db.events.reverse().sortBy("created_at")).slice(0, limit);
     } catch (error) {
       console.log(`db listEvents error: ${error}`);
+      return [];
+    }
+  },
+  listProfiles: async (pubkeys: string[]) => {
+    try {
+      return await db.events
+        .where("[kind+pubkey+d_tag]")
+        .anyOf(pubkeys.map((p) => [KIND_PROFILE, p, ""]))
+        .toArray();
+    } catch (error) {
+      console.log(`db listProfiles error: ${error}`);
+      return [];
+    }
+  },
+  listEventsByIds: async (ids: string[]): Promise<DbEvent[]> => {
+    try {
+      const eventIds: string[] = [];
+      const addrs: nip19.AddressPointer[] = [];
+      for (const id of ids) {
+        const { type, data } = nip19.decode(id);
+        if (type === "note") eventIds.push(data);
+        else if (type === "naddr") addrs.push(data);
+        else throw new Error("Bad ids");
+      }
+//      const eventsByIds = await db.events.where("id").anyOf(eventIds).toArray();
+      const eventsByIds = (await db.events.bulkGet(eventIds)).filter(e => !!e);
+      const eventsByAddr = await db.events
+        .where("[kind+pubkey+d_tag]")
+        .anyOf(addrs.map((a) => [a.kind, a.pubkey, a.identifier]))
+        .toArray();
+      console.log("listEventsByIds", eventIds, addrs, eventsByIds, eventsByAddr);
+      // merge and sort by created_at desc
+      // @ts-ignore
+      return [...eventsByIds, ...eventsByAddr].sort(
+        (a, b) => b!.created_at - a!.created_at
+      );
+    } catch (error) {
+      console.log(`db listProfiles error: ${error}`);
       return [];
     }
   },

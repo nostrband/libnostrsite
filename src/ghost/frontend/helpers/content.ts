@@ -72,17 +72,18 @@ export default function content(options: any = {}) {
   // @ts-ignore
   const self: any = this;
 
-  const hash = options.hash || {};
-  const truncateOptions: any = {};
-  let runTruncate = false;
+  // const hash = options.hash || {};
+  // const truncateOptions: any = {};
+  // let runTruncate = false;
 
-  for (const key of ["words", "characters"]) {
-    if (Object.prototype.hasOwnProperty.call(hash, key)) {
-      runTruncate = true;
-      truncateOptions[key] = parseInt(hash[key], 10);
-    }
-  }
+  // for (const key of ["words", "characters"]) {
+  //   if (Object.prototype.hasOwnProperty.call(hash, key)) {
+  //     runTruncate = true;
+  //     truncateOptions[key] = parseInt(hash[key], 10);
+  //   }
+  // }
 
+  console.log("content self html", self.html);
   if (self.html === null) {
     self.html = "";
   }
@@ -93,10 +94,11 @@ export default function content(options: any = {}) {
   }
 
   let html = self.html;
-  if (runTruncate)
-    html = downsize(self.html, truncateOptions);
+  // if (runTruncate)
+  //   html = downsize(self.html, truncateOptions);
 
   html = `<np-content id="${self.id}">${html}</np-content>`;
+  console.log("content html", html);
 
   // some contributor relays to fetch their replies
   const relays = [

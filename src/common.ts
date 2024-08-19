@@ -8,7 +8,7 @@ import {
 } from "./nostrsite/consts";
 import { NostrSiteRenderer } from "./nostrsite/nostr-site-renderer";
 import { SiteAddr } from "./nostrsite/types/site-addr";
-import NDK, { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NDKFilter, NostrEvent } from "@nostr-dev-kit/ndk";
 import { slugify } from "./ghost/helpers/slugify";
 import {
   GlobalNostrSite,
@@ -19,6 +19,7 @@ import {
   Store,
   User,
   fetchEvent,
+  fetchEvents,
   fetchOutboxRelays,
   isAudioUrl,
   isImageUrl,
@@ -28,6 +29,7 @@ import { toRGBString } from "./color";
 import { dbi } from "./nostrsite/store/db";
 import { load as loadHtml } from "cheerio";
 import { getOembedUrl } from "./nostrsite/parser/oembed-providers";
+import * as luxon from "luxon";
 
 export function parseAddr(naddr: string): SiteAddr {
   const { type, data } = nip19.decode(naddr);
@@ -350,7 +352,7 @@ export async function getCachedSite(
   const oldSiteIds = sites
     .filter((s) => s.id !== cachedSite?.id)
     .map((s) => s.id);
-  dbi.deleteEvents(oldSiteIds);
+  await dbi.deleteEvents(oldSiteIds);
 
   // got cached one
   if (cachedSite) return cachedSite;
@@ -441,7 +443,7 @@ class UserInterface {
     // how do we inject signup into "Like" flow?
     // - "like" plugin sends "action-like"?
     // - or does each plugin need to check if user is authed,
-    // and if now send "need auth" first? 
+    // and if now send "need auth" first?
     // - well we don't know if like plugin needs auth or not,
     // it only knows for itself right?
     // - so it sends "need-auth" and waits for next "auth" event?
@@ -449,10 +451,10 @@ class UserInterface {
     // - so we're kind-of calling a dynamically-defined function
     // and should be able to wait for it's completion? then a) only
     // one if the subscribers should receive it? - no! dispatch event does
-    // synchronous processing of all subs, b) should await for 
+    // synchronous processing of all subs, b) should await for
     // all handlers? c) return value from them?
 
-    // and then will itself receive that event and show "signup" modal and when it's 
+    // and then will itself receive that event and show "signup" modal and when it's
     // done sends "signup"
   }
 
@@ -480,6 +482,7 @@ export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
       isAudioUrl,
       isImageUrl,
       getOembedUrl,
+      luxon,
     };
   if (!s.dbCache) {
     s.dbCache = {
@@ -523,7 +526,7 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
           style="width: 100%; height: 100%"
         ></video>
         <img 
-          style='opacity: 0.4; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px' 
+          style='opacity: 0.4; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; min-height: 50px; min-width: 50px' 
           src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAACw0lEQVR4nO2aPWtUQRSGHxXdjaIkEBMLxWCjP0D8BZIQUAxW+UALK5tgSGNrG2OhKIitCGJho66aXiSKtmbzgYWJiJ9FBDWuemTgCGG5e/funJm9F8kLLyzs3jPz7pw5c86ZCxv4f9EFDAHTQAWoAl+ANaX7PKffud+cADopCErAGDAD/AKkRbpnHgGjaqvt6AAmgbcek2/EFWACKLdLxCCwFFBAPReBgZgC3NJfiSignjd15YOiF3jRRhGifA70hBLRp8stOXFB52DCbg2jkjOXgD2+Iso5uZOkuJlXiL5egMlLHa/6hFgpKPuzinDLN1+ACUsDLmY9NCc9jH8DRoA3bRJzLstqrHgKQQ+w88BqZCHLzTb+mKfh73V29gK3gD8RxYykCZnxNPqjgb3DwJNIQipp9YRPKi5abzTCJuCUp8tKCmvArqQBhwxGf9Ic23X/fA0o5ljSQJeM/05W7AfuBNo/F5MGqBgMOpdsFUeAp0Yh95IMLxgM/sYPm4EzwDvPcatJRj8bhDg3sWAHcEHDeCvjfkgytmZc5hA4ANy1hv0iCDmkXRWTEItriZ4XvujSfkAthGtZM94tHgLcM2eBj55jzoUOvz5CXPh9FiP8ThuNbs0oYB9wO9CBOBU6RckiZJvWEauxU5ROQ9IoTeqDk8DrgAJE87vEpNHhcWAhB4GHgQWI8kHa8o8aDHcECKfSAodjlLr/hLjc6TTwPqIA0VLX7blUTBjaNC8jCxDlOBlQzrnXKxky3swdx4ECTFgS6M6eo7SIawWYuNTxMh4oaeNYCsLZLBu8EboLdK3QixF9xjLYynltWARBT05uNquXTVEuQ2O2QWUdb8S+e++P7GpVnxDri5Km5MsBBbgrifG83oAoaVe84pkg1jSLHbaE1tBwtcFxbWPe13r607qXatznV1qeTmlRtDP4LDZAMfAXFbij5naP28kAAAAASUVORK5CYII="
         >
       `;
@@ -540,7 +543,8 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
             `${css}${propertyName}:${styles.getPropertyValue(propertyName)};`
         );
       }
-      div.style.cssText = cssText;
+      // override position
+      div.style.cssText = cssText + "; position: relative";
       // effects
       div.style.opacity = "1";
       div.style.visibility = "visible";
@@ -554,4 +558,216 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
   // repeat every 500 ms to make sure
   // posts loaded by pagination are handled too
   setTimeout(startReplacingFeatureImagesWithVideoPreviews, 500);
+}
+
+export async function scanRelays(
+  ndk: NDK,
+  filters: NDKFilter | NDKFilter[],
+  relayUrls: string[],
+  limit: number,
+  options?: {
+    since?: number;
+    until?: number;
+    batchSize?: number;
+    timeout?: number;
+    threads?: number;
+    matcher?: (e: NDKEvent) => boolean;
+    onBatch?: (events: NDKEvent[]) => Promise<void>;
+  }
+) {
+  const now = Math.floor(Date.now() / 1000);
+  const since = options && options.since ? options.since : 0;
+  const until = options && options.until ? options.until : now;
+  const timeout = options && options.timeout ? options.timeout : 1000;
+  const batchSize = options && options.batchSize ? options.batchSize : 100;
+  filters = Array.isArray(filters) ? filters : [filters];
+
+  console.log("scan relays", relayUrls, since, until, timeout);
+
+  interface Relay {
+    url: string;
+    buffer: NDKEvent[];
+    until: number;
+    prefetchPromise?: Promise<void>;
+  }
+
+  const relays: Relay[] = relayUrls.map((r) => ({
+    url: r,
+    until,
+    buffer: [],
+  }));
+
+  const prefetchPromises = new Set();
+  const fetch = async () => {
+    const fetches = [];
+    const prefetches = [];
+    const promises = new Set();
+
+    for (const r of relays) {
+      // no need to fetch/prefetch?
+      if (!r.until || r.buffer.length > 100) continue;
+
+      // already prefetching
+      if (r.prefetchPromise) {
+        // if we're empty wait for prefetch
+        if (!r.buffer.length) promises.add(r.prefetchPromise);
+        continue;
+      }
+
+      const windowFilters = (filters as NDKFilter[]).map((f) => ({
+        ...f,
+        until: r.until,
+        since,
+      }));
+      const fetcher = async () => {
+        console.log(Date.now(), "scan relay", r.url, "until", r.until);
+        const eventSet = await fetchEvents(
+          ndk,
+          windowFilters,
+          [r.url],
+          timeout
+        );
+
+        // make sure it fits 'since',
+        // sort by date desc
+        let buffer = [...eventSet].filter((e) => e.created_at! >= since);
+
+        if (options && options.matcher)
+          buffer = buffer.filter((e) => options.matcher!(e));
+
+        // append filtered events
+        r.buffer.push(...buffer);
+
+        // ensure sort order
+        r.buffer.sort((a, b) => b.created_at! - a.created_at!);
+
+        // got something new? until = last event - 1
+        if (buffer.length)
+          r.until = r.buffer[r.buffer.length - 1].created_at! - 1;
+        else r.until = 0; // eof
+
+        console.log(
+          Date.now(),
+          "scan relay",
+          r.url,
+          "got",
+          buffer.length,
+          "buffered",
+          r.buffer.length,
+          "until",
+          r.until,
+          "skipped",
+          eventSet.size - r.buffer.length
+        );
+      };
+
+      if (!r.buffer.length) fetches.push(fetcher);
+      else prefetches.push({ relay: r, fetcher });
+    }
+
+    // throttle to several relays only
+    const MAX_BATCH_SIZE = options && options.threads ? options.threads : 5;
+    while (fetches.length) {
+      // promises might have been populated from prefetches
+      if (promises.size < MAX_BATCH_SIZE) {
+        const f = fetches.shift()!;
+        const promise = f();
+        promises.add(promise);
+        promise.then(() => {
+          promises.delete(promise);
+          console.log(Date.now(), "scan done promise, left", promises.size);
+        });
+      }
+      if (promises.size >= MAX_BATCH_SIZE) await Promise.race([...promises]);
+    }
+    if (promises.size) await Promise.all([...promises]);
+
+    // start some prefetches in the background
+    while (prefetchPromises.size < MAX_BATCH_SIZE && prefetches.length) {
+      const f = prefetches.shift()!;
+      console.log(Date.now(), "scan prefetch", f.relay.url);
+      const promise = f.fetcher();
+      prefetchPromises.add(promise);
+      f.relay.prefetchPromise = promise;
+      promise.then(() => {
+        prefetchPromises.delete(promise);
+        f.relay.prefetchPromise = undefined;
+        console.log(
+          Date.now(),
+          "scan done prefetch, left",
+          prefetchPromises.size
+        );
+      });
+    }
+  };
+
+  const ids = new Set<string>();
+  const events: NDKEvent[] = [];
+  const next = () => {
+    // find newest event among relays
+    let e: NDKEvent | undefined;
+    for (const r of relays) {
+      if (!r.buffer.length) continue;
+      if (!e || e.created_at! < r.buffer[0].created_at!) e = r.buffer[0];
+    }
+
+    // console.log("next", e);
+    if (!e) return false;
+
+    // add to map
+    ids.add(e.id);
+    events.push(e);
+
+    // console.log(
+    //   Date.now(),
+    //   "scan next event",
+    //   e.id,
+    //   "relay",
+    //   relays.find((r) => r.buffer.length && r.buffer[0].id === e!.id)?.url,
+    //   "total",
+    //   events.length
+    // );
+
+    // drop this event from all relays
+    for (const r of relays) {
+      while (r.buffer.length) {
+        if (ids.has(r.buffer[0].id)) {
+          // console.log(Date.now(), "scan dup", r.buffer[0].id, "on", r.url);
+          r.buffer.shift();
+        } else break;
+      }
+    }
+
+    // got one
+    return true;
+  };
+
+  const onBatch = async (last?: boolean) => {
+    if (!options || !options.onBatch) return;
+    if (!last && events.length < batchSize) return;
+
+    const batch = events.splice(0, Math.min(batchSize, events.length));
+    batch.sort((a, b) => b.created_at! - a.created_at!);
+    await options.onBatch(batch);
+  };
+
+  while (ids.size < limit) {
+    // make sure we fetch from each relay that has
+    // empty buffer and isn't eof
+    await fetch();
+    // console.log("events", events.size);
+
+    // take the next newest event and put to events map
+    if (!next()) break;
+
+    // deliver a batch 
+    await onBatch();
+  }
+
+  // last one
+  await onBatch(true);
+
+  // return sorted newest events,
+  // this will be empty if onBatch was specified
+  return events.sort((a, b) => b.created_at! - a.created_at!);
 }

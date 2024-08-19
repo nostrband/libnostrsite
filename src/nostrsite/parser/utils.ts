@@ -9,11 +9,17 @@ export function tags(
   return event.tags.filter((t) => t.length >= len && t[0] === name);
 }
 
-export function tag(event: NDKEvent | NostrEvent, name: string): string[] | null {
+export function tag(
+  event: NDKEvent | NostrEvent,
+  name: string
+): string[] | null {
   return tags(event, name)?.[0];
 }
 
-export function tvs(event: NDKEvent | NostrEvent, name: string): string[] | null {
+export function tvs(
+  event: NDKEvent | NostrEvent,
+  name: string
+): string[] | null {
   return tag(event, name)?.slice(1) || null;
 }
 
@@ -27,6 +33,27 @@ export function eventAddr(e: NDKEvent | NostrEvent) {
     pubkey: e.pubkey,
     kind: e.kind || 0,
   };
+}
+
+export function normalizeId(id: string): [string, string[]] {
+  const { type, data } = nip19.decode(id);
+  switch (type) {
+    case "npub":
+      return [id, []];
+    case "nprofile":
+      return [nip19.npubEncode(data.pubkey), data.relays || []];
+    case "note":
+      return [id, []];
+    case "nevent":
+      return [nip19.noteEncode(data.id), data.relays || []];
+    case "naddr":
+      return [nip19.naddrEncode({
+        ...data,
+        relays: undefined,
+      }), data.relays || []];
+    default:
+      throw new Error("Invalid id " + id);
+  }
 }
 
 export function eventId(e: NDKEvent | NostrEvent) {
@@ -45,9 +72,6 @@ export function eventId(e: NDKEvent | NostrEvent) {
 }
 
 export function profileId(e: NDKEvent | NostrEvent | string) {
-  if (typeof e === "string")
-    return nip19.npubEncode(e);
-  else
-    return nip19.npubEncode(e.pubkey);
+  if (typeof e === "string") return nip19.npubEncode(e);
+  else return nip19.npubEncode(e.pubkey);
 }
-

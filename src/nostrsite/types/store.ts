@@ -10,7 +10,7 @@ export interface StoreListResponse {
   tags?: Tag[];
   authors?: Author[];
   profiles?: Profile[];
-  // related?: Post[];
+  related?: Post[];
   recommendations?: Recommendation[];
   pagination: Pagination;
 }
@@ -23,8 +23,7 @@ export type StoreObjectType =
   | "authors"
   | "recommendations"
   | "profiles"
-  // | "related"
-  ;
+  | "related";
 
 export interface StoreListRequest {
   type: StoreObjectType;
@@ -48,13 +47,18 @@ export interface StoreListRequest {
 
   // event kinds
   kinds?: number[];
+  ids?: string[];
 }
 
 export interface Store {
   prepare(getUrl: (o: StoreObject) => string): Promise<void>;
   isValidType(type: string): boolean;
   list: (request: StoreListRequest) => Promise<StoreListResponse>;
-  get: (slugId: string, type?: string) => Promise<StoreObject | undefined>;
+  get: (
+    slugId: string,
+    type?: string,
+    sync?: boolean
+  ) => Promise<StoreObject | undefined>;
   getUrl: (id: string, type?: StoreObjectType) => string | undefined;
   destroy(): void;
 }

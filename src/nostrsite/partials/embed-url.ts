@@ -1,6 +1,11 @@
 const sizeLimit = 200;
 export const EMBED_URL_PARTIAL = `
 <style>
+  figure.np-embed-figure {
+    padding: 0;
+    margin: 0;
+    border: 0;
+  }
   figure.np-embed-figure .np-embed-link {
     display: flex;
     justify-content: space-between;
@@ -17,6 +22,8 @@ export const EMBED_URL_PARTIAL = `
     flex: 5;
     padding: 20px;
     width: 100%;
+    margin: 0;
+    border: 0;
   }
   figure.np-embed-figure a.np-embed-title {
     display: -webkit-box;
@@ -75,6 +82,8 @@ export const EMBED_URL_PARTIAL = `
     border-bottom-right-radius: 5px; 
     object-fit: cover;
     object-position: left 50%;
+    margin: 0;
+    border: 0;
   }
   @media screen and (max-width: 600px) {
     figure.np-embed-figure .np-embed-link {

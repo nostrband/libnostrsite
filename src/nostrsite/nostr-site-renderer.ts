@@ -103,7 +103,7 @@ export class NostrSiteRenderer implements Renderer {
     }
 
     const site = await fetchNostrSite(this.addr, this.ndk);
-    if (this.useCache() && site) dbi.addEvents([site]);
+    if (this.useCache() && site) await dbi.addEvents([site]);
     return new NDKEvent(this.ndk, site);
   }
 
@@ -120,7 +120,7 @@ export class NostrSiteRenderer implements Renderer {
       const oldCachedExtIds = cachedExtEvents
         .filter((x) => !exts.find((e) => e.id === x.id))
         .map((x) => x.id);
-      dbi.deleteEvents(oldCachedExtIds);
+      await dbi.deleteEvents(oldCachedExtIds);
 
       // get non-cached ext ids to fetch from relays
       const nonCachedIds = extIds.filter(
@@ -151,7 +151,7 @@ export class NostrSiteRenderer implements Renderer {
       if (!events || !events.size) throw new Error("Theme not found");
 
       // put to cache
-      if (this.useCache()) dbi.addEvents([...events]);
+      if (this.useCache()) await dbi.addEvents([...events]);
 
       exts.push(...[...events].map((e) => e.rawEvent()));
     }
@@ -278,18 +278,9 @@ export class NostrSiteRenderer implements Renderer {
     // templating
     this.engine = new ThemeEngine(this.store, options);
 
-    // theme override
+    // set or fetch theme
     if (options.theme) this.setTheme(options.theme);
-
-    // do it in parallel to save some latency
-    await Promise.all([
-      // externally-supplied theme doesn't need to be fetched
-      options.theme ? Promise.resolve(null) : this.fetchTheme(),
-      // externally-supplied store doesn't need to be loaded
-      options.store
-        ? Promise.resolve(null)
-        : (this.store as NostrStore).load(options.maxObjects),
-    ]);
+    else await this.fetchTheme();
 
     // now we have everything needed to init the engine
     await this.engine.init(
@@ -301,33 +292,28 @@ export class NostrSiteRenderer implements Renderer {
       this.assetFetcher
     );
 
-    // after data is loaded and engine is initialized,
+    // after the engine is initialized,
     // prepare using the engine (assign urls etc)
     await this.store.prepare(this.engine.getMetaDataUrl.bind(this.engine));
-
-    // some defaults
-    // if (!settings.cover_image && settings.contributor_pubkeys) {
-    //   for (const pubkey of settings.contributor_pubkeys) {
-    //     const profile = this.store.getProfile(pubkey);
-    //     if (profile?.profile?.banner) {
-    //       settings.cover_image = profile?.profile?.banner;
-    //       break;
-    //     }
-    //   }
-    // }
-    // FIXME somehow derive from profile etc
-    // if (!settings.accent_color) {
-    //   settings.accent_color = "rgb(255, 0, 149)";
-    // }
-    // console.log("updated settings", settings);
-    // this.settings = settings;
-
-    // if (themes.length) this.theme = themes[0];
 
     // cache theme assets
     if (this.caches && this.caches.themeCache) {
       await this.precacheTheme(this.caches.themeCache);
     }
+
+    // load the store if not provided externally
+    if (!options.store)
+      await (this.store as NostrStore).load(options.maxObjects);
+
+    // do it in parallel to save some latency
+    // await Promise.all([
+    //   // externally-supplied theme doesn't need to be fetched
+    //   options.theme ? Promise.resolve(null) : this.fetchTheme(),
+    //   // externally-supplied store doesn't need to be loaded
+    //   options.store
+    //     ? Promise.resolve(null)
+    //     : (this.store as NostrStore).load(options.maxObjects),
+    // ]);
 
     // cache site images
     const siteMediaUrls: string[] = [];
@@ -533,7 +519,7 @@ export class NostrSiteRenderer implements Renderer {
     const profiles: Profile[] = [];
     for (const p of pubkeys) {
       const profile = await this.store!.get(nip19.npubEncode(p), "profiles");
-      if (profile) profiles.push((profile as Profile));
+      if (profile) profiles.push(profile as Profile);
     }
 
     return profiles;

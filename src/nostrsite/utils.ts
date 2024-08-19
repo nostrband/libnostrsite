@@ -2,6 +2,7 @@ import NDK, { NDKEvent, NDKFilter, NDKRelaySet } from "@nostr-dev-kit/ndk";
 import {
   BLACKLISTED_RELAYS,
   FALLBACK_OUTBOX_RELAYS,
+  GOOD_RELAYS,
   KIND_CONTACTS,
   KIND_RELAYS,
   OUTBOX_RELAYS,
@@ -111,35 +112,53 @@ export class PromiseQueue {
   }
 }
 
-export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
+export async function fetchRelays(
+  ndk: NDK,
+  pubkeys: string[],
+  maxRelaysPerPubkey: number = 10
+) {
+  const pubkeyRelays = new Map<
+    string,
+    {
+      writeRelays: string[];
+      readRelays: string[];
+    }
+  >();
 
-  const writeRelays: string[] = [];
-  const readRelays: string[] = [];
+  // const writeRelays: string[] = [];
+  // const readRelays: string[] = [];
 
   const parseRelays = (events: Set<NDKEvent>) => {
     for (const e of events) {
+      const pr = pubkeyRelays.get(e.pubkey) || {
+        writeRelays: [],
+        readRelays: [],
+      };
       if (e.kind === KIND_RELAYS) {
         const filter = (mark: string) => {
           return e.tags
             .filter(
               (t) =>
-                t.length >= 2 && t[0] === "r" && (t.length === 2 || t[2] === mark)
+                t.length >= 2 &&
+                t[0] === "r" &&
+                (t.length === 2 || t[2] === mark)
             )
             .map((t) => t[1]);
         };
-        writeRelays.push(...filter("write"));
-        readRelays.push(...filter("read"));
+        pr.writeRelays.push(...filter("write"));
+        pr.readRelays.push(...filter("read"));
       } else {
         try {
           const relays = JSON.parse(e.content);
           for (const url in relays) {
-            if (relays[url].write) writeRelays.push(url);
-            if (relays[url].read) readRelays.push(url);
+            if (relays[url].write) pr.writeRelays.push(url);
+            if (relays[url].read) pr.readRelays.push(url);
           }
         } catch {}
       }
-    }  
-  }
+      pubkeyRelays.set(e.pubkey, pr);
+    }
+  };
 
   let events = await fetchEvents(
     ndk,
@@ -152,15 +171,22 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
     2000
   );
   parseRelays(events);
-  console.log("relays", events, readRelays, writeRelays);
-  if (!readRelays.length && !writeRelays.length) {
+  console.log("relays", events, pubkeyRelays);
+  const emptyPubkeys = [...pubkeyRelays.entries()]
+    .map(([pubkey, relays]) => {
+      if (!relays.readRelays.length && !relays.writeRelays.length)
+        return pubkey;
+    })
+    .filter((p) => !!p) as string[];
+
+  if (emptyPubkeys.length) {
     // all right let's add nostr.band and higher timeout
     events = await fetchEvents(
       ndk,
       {
         // @ts-ignore
         kinds: [KIND_CONTACTS, KIND_RELAYS],
-        authors: pubkeys,
+        authors: emptyPubkeys,
       },
       [...FALLBACK_OUTBOX_RELAYS, ...OUTBOX_RELAYS],
       5000
@@ -168,10 +194,58 @@ export async function fetchRelays(ndk: NDK, pubkeys: string[]) {
     parseRelays(events);
   }
 
-  // NOTE: some people mistakenly mark all relays as write/read
+  const prepare = (relays: string[]) => {
+    // normalize
+    const normal = relays
+      // normalize urls
+      .map((r) => {
+        try {
+          const u = new URL(r);
+          if (u.protocol === "wss:" || u.protocol === "ws:") return u.href;
+        } catch {}
+      })
+      // only valid ones
+      .filter((u) => !!u)
+      // remove bad relays and outbox
+      .filter(
+        (r) => !BLACKLISTED_RELAYS.includes(r!) && !OUTBOX_RELAYS.includes(r!)
+      ) as string[];
+
+    // dedup
+    const uniq = [...new Set(normal)];
+
+    // prioritize good relays
+    const good = uniq.sort((a, b) => {
+      const ga = GOOD_RELAYS.includes(a);
+      const gb = GOOD_RELAYS.includes(b);
+      if (ga == gb) return 0;
+      return ga ? -1 : 1;
+    });
+
+    if (good.length > maxRelaysPerPubkey)
+      good.length = maxRelaysPerPubkey;
+
+    return good;
+  };
+
+  // sanitize and prioritize per pubkey
+  for (const rs of pubkeyRelays.values()) {
+    rs.readRelays = prepare(rs.readRelays);
+    rs.writeRelays = prepare(rs.writeRelays);
+
+    // NOTE: some people mistakenly mark all relays as write/read
+    if (!rs.readRelays.length) rs.readRelays = rs.writeRelays;
+    if (!rs.writeRelays.length) rs.writeRelays = rs.readRelays;
+  }
+
+  // merge and dedup all write/read relays
   return {
-    write: [...new Set(writeRelays.length ? writeRelays : readRelays)],
-    read: [...new Set(readRelays.length ? readRelays : writeRelays)],
+    write: [...new Set(
+      [...pubkeyRelays.values()].map(pr => pr.writeRelays).flat()
+    )],
+    read: [...new Set(
+      [...pubkeyRelays.values()].map(pr => pr.readRelays).flat()
+    )],
   };
 }
 
@@ -193,7 +267,7 @@ export async function fetchEvents(
 
   // don't go crazy here! just put higher-priority relays to
   // the front of this array
-  if (relays.length > 10) relays.length = 10;
+  if (relays.length > 20) relays.length = 20;
 
   let eose = false;
   const events = new Map<string, NDKEvent>();
@@ -251,6 +325,10 @@ export async function fetchEvent(
   relays: string[],
   timeoutMs: number = 1000
 ): Promise<NDKEvent | undefined> {
+  // ensure proper limit
+  if (Array.isArray(filters)) filters.forEach((f) => (f.limit = 1));
+  else filters.limit = 1;
+
   const events = await fetchEvents(ndk, filters, relays, timeoutMs);
   if (events.size) return events.values().next().value;
   return undefined;
@@ -268,29 +346,50 @@ export function getUrlMediaMime(u: string) {
     const url = new URL(u);
     const ext = url.pathname.split(".").pop();
     switch (ext?.toLowerCase()) {
-      case "mp4": return "video/mp4";
-      case "avi": return "video/x-msvideo";
-      case "mpeg": return "video/mpeg";
-      case "mkv": return "video/x-matroska";
-      case "mov": return "video/quicktime";
-      case "webm": return "video/webm";
-      case "ogv": return "video/ogg";
+      case "mp4":
+        return "video/mp4";
+      case "avi":
+        return "video/x-msvideo";
+      case "mpeg":
+        return "video/mpeg";
+      case "mkv":
+        return "video/x-matroska";
+      case "mov":
+        return "video/quicktime";
+      case "webm":
+        return "video/webm";
+      case "ogv":
+        return "video/ogg";
 
-      case "png": return "image/png";
-      case "svg": return "image/svg+xml";
-      case "jpg": return "image/jpeg";
-      case "jpeg": return "image/jpeg";
-      case "gif": return "image/gif";
-      case "tif": return "image/tiff";
-      case "tiff": return "image/tiff";
-      case "webp": return "image/webp";
+      case "png":
+        return "image/png";
+      case "svg":
+        return "image/svg+xml";
+      case "jpg":
+        return "image/jpeg";
+      case "jpeg":
+        return "image/jpeg";
+      case "gif":
+        return "image/gif";
+      case "tif":
+        return "image/tiff";
+      case "tiff":
+        return "image/tiff";
+      case "webp":
+        return "image/webp";
 
-      case "mp3": return "audio/mpeg";
-      case "aac": return "audio/aac";
-      case "ogg": return "audio/ogg";
-      case "oga": return "audio/ogg";
-      case "wav": return "audio/wav"
-      case "weba": return "audio/webm";
+      case "mp3":
+        return "audio/mpeg";
+      case "aac":
+        return "audio/aac";
+      case "ogg":
+        return "audio/ogg";
+      case "oga":
+        return "audio/ogg";
+      case "wav":
+        return "audio/wav";
+      case "weba":
+        return "audio/webm";
     }
   } catch {}
   return "";

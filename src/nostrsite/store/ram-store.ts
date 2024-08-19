@@ -1,3 +1,4 @@
+import { normalizeId } from "..";
 import { DEFAULT_MAX_LIMIT } from "../consts";
 import { Author } from "../types/author";
 import { Post } from "../types/post";
@@ -17,7 +18,7 @@ export class RamStore implements Store {
   protected authors: Author[] = [];
   protected profiles: Profile[] = [];
   protected recommendations: Recommendation[] = [];
-  // protected related: Post[] = [];
+  protected related: Post[] = [];
 
   constructor() {}
 
@@ -31,12 +32,23 @@ export class RamStore implements Store {
     throw new Error("Store fetch not implemented " + slugId + " type " + type);
   }
 
+  protected async fetchRelated(
+    _ids: string[],
+    _relays: string[]
+  ): Promise<void> {
+    throw new Error("Store fetch related not implemented");
+  }
+
   public async get(
     slugId: string,
-    type?: string
+    type?: string,
+    sync?: boolean
   ): Promise<StoreObject | undefined> {
+    try {
+      [slugId] = normalizeId(slugId);
+    } catch {}
     let object = this.getSync(slugId, type);
-    if (!object) {
+    if (!object && !sync) {
       await this.fetchObject(slugId, type);
       object = this.getSync(slugId, type);
     }
@@ -55,15 +67,16 @@ export class RamStore implements Store {
         this.posts.find((p) => p.id === slugId || p.slug === slugId) ||
         this.tags.find((p) => p.id === slugId || p.slug === slugId) ||
         this.authors.find((p) => p.id === slugId || p.slug === slugId) ||
-        this.profiles.find((p) => p.id === slugId || p.slug === slugId)
+        this.profiles.find((p) => p.id === slugId || p.slug === slugId) ||
+        this.related.find((p) => p.id === slugId || p.slug === slugId)
       );
     }
 
     switch (type) {
       case "posts":
         return this.posts.find((p) => p.id === slugId || p.slug === slugId);
-      // case "related":
-      //   return this.related.find((p) => p.id === slugId || p.slug === slugId);
+      case "related":
+        return this.related.find((p) => p.id === slugId || p.slug === slugId);
       case "tags":
         return this.tags.find((p) => p.id === slugId || p.slug === slugId);
       case "authors":
@@ -80,6 +93,31 @@ export class RamStore implements Store {
   public async list(req: StoreListRequest): Promise<StoreListResponse> {
     const { type } = req;
     const slugId = req.id || req.slug || undefined;
+
+    // ensure proper id format
+    let idRelays: string[] = [];
+    if (req.ids) {
+      for (let i = 0; i < req.ids.length; i++) {
+        const [id, relays] = normalizeId(req.ids[i]);
+        req.ids[i] = id;
+        idRelays.push(...relays);
+      }
+      idRelays = [...new Set(idRelays)];
+    }
+
+    if (type === "related" && req.ids) {
+      // check input
+      for (const id of req.ids)
+        if (id.startsWith("npub")) throw new Error("Invalid related id");
+
+      // fetch non-existent related ids
+      const newIds = req.ids.filter(
+        (id) =>
+          !this.related.find((r) => r.id === id) &&
+          !this.posts.find((r) => r.id === id)
+      );
+      if (newIds.length) await this.fetchRelated(newIds, idRelays);
+    }
 
     // NOTE: it's a hack, a typical 'related' query,
     // we should implement this in a better way
@@ -174,6 +212,13 @@ export class RamStore implements Store {
           break;
         case "recommendations":
           results.push(...this.recommendations);
+          break;
+        case "related":
+          results.push(
+            ...this.related.filter(
+              (p) => !req.ids || !req.ids.length || req.ids.includes(p.id!)
+            )
+          );
           break;
         default:
           throw new Error("Not implemented");

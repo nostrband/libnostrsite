@@ -34,6 +34,9 @@ export interface Site {
   include_kinds?: string[],
   include_relays?: string[];
 
+  homepage_tags?: { tag: string, value: string }[],
+  homepage_kinds?: string[];
+
   engine?: string;
   // themes?: string[];
   // plugins?: string[];

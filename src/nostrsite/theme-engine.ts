@@ -30,6 +30,7 @@ import {
 import merge from "lodash-es/merge";
 import toNumber from "lodash-es/toNumber";
 import {
+  MAX_OBJECTS_SSR,
   PLAY_FEATURE_BUTTON_PREFIX,
   Profile,
   RenderOptions,
@@ -430,7 +431,7 @@ export class ThemeEngine {
   }
 
   public async getSiteMap(limit?: number) {
-    limit = limit || 1000;
+    limit = limit || MAX_OBJECTS_SSR;
 
     const map: string[] = [];
     const base = this.settings!.url || "/";

@@ -10,20 +10,36 @@ export const SUPPORTED_KINDS = [KIND_NOTE, KIND_LONG_NOTE];
 export const JQUERY = "https://code.jquery.com/jquery-3.5.1.min.js";
 export const DEFAULT_MAX_LIMIT = 20;
 
+export const MAX_OBJECTS_SSR = 3000;
+export const MAX_OBJECTS_SW = 1000;
+export const MAX_OBJECTS_IIFE = 50;
+export const MAX_OBJECTS_PREVIEW = 50;
+export const MAX_OBJECTS_TAB = 1000;
+
 export const OUTBOX_RELAYS = [
-  "wss://purplepag.es",
-  "wss://user.kindpag.es",
-  "wss://relay.nos.social",
+  "wss://purplepag.es/",
+  "wss://user.kindpag.es/",
+  "wss://relay.nos.social/",
 ];
 
 export const FALLBACK_OUTBOX_RELAYS = [
   "wss://relay.nostr.band/all"
 ];
 
-export const SITE_RELAY = "wss://relay.npubpro.com";
+export const SITE_RELAY = "wss://relay.npubpro.com/";
 
 export const BLACKLISTED_RELAYS = [
-  "wss://brb.io"
+  "wss://brb.io/"
+];
+
+export const GOOD_RELAYS = [
+  "wss://relay.damus.io/",
+  "wss://relay.nostr.band/",
+  "wss://nos.lol/",
+  "wss://nostr.wine/",
+  "wss://nostr.land/",
+  "wss://relay.primal.net/",
+  "wss://relay.oxtr.dev/",
 ];
 
 export const JS_JQUERY = "https://code.jquery.com/jquery-3.5.1.min.js";
@@ -33,7 +49,7 @@ export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.5.5.js";
 export const JS_NOSTR_LOGIN = "https://unpkg.com/nostr-login@1.5.2/dist/unpkg.js";
 export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.11/dist/index.js";
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
-export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.3.js";
+export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
 export const JS_CONTENT_CTA = "https://cdn.npubpro.com/content-cta.iife.1.0.2.js";
 
 export const BLOSSOM_FALLBACKS = [
