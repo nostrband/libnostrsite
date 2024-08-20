@@ -22,12 +22,18 @@ import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
-import { fetchEvent, fetchEvents, isBlossomUrl, isEqualContentSettings } from "./utils";
+import {
+  fetchEvent,
+  fetchEvents,
+  isBlossomUrl,
+  isEqualContentSettings,
+} from "./utils";
 import { dbi } from "./store/db";
-import { AssetFetcher, Profile, Store } from ".";
+import { AssetFetcher, Profile, Route, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
 import { fetchNostrSite, getCachedSite } from "..";
 import { nip19 } from "nostr-tools";
+import { DefaultRouter } from "./modules/default-router";
 
 export class NostrSiteRenderer implements Renderer {
   private addr: SiteAddr;
@@ -282,12 +288,15 @@ export class NostrSiteRenderer implements Renderer {
     if (options.theme) this.setTheme(options.theme);
     else await this.fetchTheme();
 
+    // we need it for the store
+    const router = new DefaultRouter(this.settings);
+
     // now we have everything needed to init the engine
     await this.engine.init(
       settings,
       [this.theme!],
       this.config,
-      undefined,
+      router,
       undefined,
       this.assetFetcher
     );
@@ -302,8 +311,16 @@ export class NostrSiteRenderer implements Renderer {
     }
 
     // load the store if not provided externally
-    if (!options.store)
-      await (this.store as NostrStore).load(options.maxObjects);
+    if (!options.store) {
+      let route: Route | undefined = undefined;
+      if (options.currentPath)
+        route = router.route(options.currentPath);
+
+      await (this.store as NostrStore).load(
+        options.maxObjects,
+        route
+      );
+    }
 
     // do it in parallel to save some latency
     // await Promise.all([

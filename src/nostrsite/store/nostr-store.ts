@@ -31,6 +31,7 @@ import { DbEvent, dbi } from "./db";
 import {
   PromiseQueue,
   RenderMode,
+  Route,
   eventId,
   fetchEvent,
   fetchEvents,
@@ -211,18 +212,79 @@ export class NostrStore extends RamStore {
   //   return newUntil;
   // }
 
-  private async loadIife() {
+  private async fetchForRoute(route?: Route) {
+    // assume homepage if not provided
+    route = route || {
+      context: ["home", "index"],
+      path: "/",
+      pathBase: "/",
+      pathHtml: "/",
+    };
+
+    // now fetch route-specific stuff, if any
+    let kinds: number[] = [];
+    let hashtags: string[] = [];
+    let authors: string[] = [];
+    if (route.context.includes("index") && !route.context.includes("kind")) {
+      if (this.settings.homepage_kinds)
+        kinds = this.settings.homepage_kinds.map((k) => parseInt(k));
+      if (this.settings.homepage_tags) {
+        hashtags = this.settings.homepage_tags
+          .filter((t) => t.tag === "t")
+          .map((t) => t.value);
+      }
+    } else if (route.context.includes("kind")) {
+      kinds = route.context
+        .filter((c) => c.startsWith("kind:"))
+        .map((c) => parseInt(c.split("kind:")[1]));
+    } else if (route.context.includes("tag")) {
+      hashtags = [route.param!];
+    } else if (route.context.includes("author")) {
+      authors = [route.param!];
+    }
+    // NOTE: post pages are fetched automatically using fetchObject
+
+    console.log("fetchForRoute", route, { authors, kinds, hashtags });
+
+    // if there are filters specific to the current page,
+    // make sure we load them too
+    if (kinds.length || hashtags.length || authors.length) {
+      // scan until (before) the last-known main-synched object
+      const until = this.getUntil();
+
+      // do not use since/until bcs db may contain a subset of data
+      // for different filters
+      const filters = this.createTagFilters(
+        undefined,
+        until,
+        authors.length ? authors : undefined,
+        kinds.length ? kinds : undefined,
+        hashtags.length ? hashtags : undefined
+      );
+
+      // fetch up to 30 new objects, we don't intend to write
+      // them to db to save for later, we just want to make sure
+      // the current iife-rendered page is filled with content
+      await this.fetchAllObjects(30, { filters });
+    }
+  }
+
+  private async loadIife(route?: Route) {
     // a fast method to get some usable set of events
 
     // load some posts from db and
     const since = await this.loadFromDb(this.maxObjects * 10);
     // fetch since latest in db until now
-    await this.fetchAllObjects(this.maxObjects, since);
+    await this.fetchAllObjects(this.maxObjects, { since });
+    // fetch for current route
+    await this.fetchForRoute(route);
   }
 
-  private async loadPreview() {
+  private async loadPreview(route?: Route) {
     // fetch the latest stuff from relays
-    await this.fetchAllObjects(this.maxObjects);
+    await this.fetchAllObjects(this.maxObjects, {});
+    // fetch for current route
+    await this.fetchForRoute(route);
   }
 
   private async getRelays() {
@@ -241,15 +303,23 @@ export class NostrStore extends RamStore {
   }
 
   private async fetchAllObjects(
-    max: number = 0,
-    since: number = 0,
-    until: number = 0,
-    slow = false
+    max: number,
+    {
+      since = 0,
+      until = 0,
+      slow = false,
+      filters,
+    }: {
+      since?: number;
+      until?: number;
+      slow?: boolean;
+      filters?: NDKFilter[];
+    }
   ) {
     if (this.isOffline()) return;
 
     const relays = await this.getRelays();
-    console.log(Date.now(), "sync start max", max, relays);
+    console.log(Date.now(), "sync start max", max, relays, filters);
 
     const timeout =
       this.mode === "iife" ||
@@ -263,10 +333,15 @@ export class NostrStore extends RamStore {
     if (this.settings.include_all || !!this.settings.include_tags?.length) {
       promises.push(
         (async () => {
-          await scanRelays(this.ndk, this.createTagFilters(), relays, max, {
+          const doStore = !filters;
+          filters = filters || this.createTagFilters();
+          await scanRelays(this.ndk, filters, relays, max, {
             matcher: (e) => this.matchObject(e),
             onBatch: async (events) => {
-              await this.storeEvents(events);
+              // NOTE: we don't store objects fetched with custom filters,
+              // this will cause main sync process to assume that
+              // main sync was done until these irrelevant events
+              if (doStore) await this.storeEvents(events);
               await this.parseEvents(events);
               await this.processBatch();
               console.warn(
@@ -284,97 +359,20 @@ export class NostrStore extends RamStore {
           });
         })()
       );
-      // for (const relay of relays) {
-      //   promises.push(
-      //     this.scanRelayPosts(
-      //       relay,
-      //       max,
-      //       since,
-      //       this.fetchByFilterFromRelay.bind(this)
-      //     )
-      //   );
-      // }
     }
 
-    // scan all relays in parallel, track until cursor
-    // on each relay separately to make sure we scan them
-    // properly
     await Promise.all(promises);
 
-    // let until = 0;
-    // let reqsLeft = 30; // 30*300=10k
-    // do {
-    //   // const was_count = this.posts.length;
-    //   const newUntil = await this.fetchObjects(since, until);
-
-    //   // if (this.posts.length === was_count) {
-    //   //   console.log("stop sync, end");
-    //   //   break;
-    //   // }
-
-    //   // const newUntil = this.posts
-    //   //   .map((p) => p.event.created_at)
-    //   //   .reduce((last, current) => Math.min(last, current), until);
-    //   console.log("newUntil", newUntil);
-    //   if (!newUntil) {
-    //     console.log("stop sync, end");
-    //     break;
-    //   }
-    //   if (newUntil === until) {
-    //     console.log("stop sync, same cursor", newUntil);
-    //     break;
-    //   }
-    //   until = newUntil!;
-    //   --reqsLeft;
-    // } while (this.posts.length < max && reqsLeft > 0);
-
-    console.log(Date.now(), "sync done all posts", this.posts.length);
+    console.log(Date.now(), "sync done all posts", this.posts.length, filters);
   }
 
-  // private async scanRelayPosts(
-  //   relay: string,
-  //   max: number = 0,
-  //   since: number = 0,
-  //   fetcher: (
-  //     relay: string,
-  //     since: number,
-  //     until: number
-  //   ) => Promise<number | undefined>
-  // ) {
-  //   console.log(Date.now(), "sync start", relay, max, since);
-
-  //   let until = 0;
-  //   let reqsLeft = 30; // 30*300=10k
-  //   do {
-  //     // const was_count = this.posts.length;
-  //     const newUntil = await fetcher(relay, since, until);
-  //     console.log(
-  //       "sync next until",
-  //       relay,
-  //       newUntil,
-  //       "posts",
-  //       this.posts.length
-  //     );
-  //     if (!newUntil) {
-  //       console.log("sync end", relay);
-  //       break;
-  //     }
-  //     if (newUntil === until) {
-  //       console.log("sync stop same cursor", relay, newUntil);
-  //       break;
-  //     }
-  //     until = newUntil!;
-  //     --reqsLeft;
-  //   } while (this.posts.length < max && reqsLeft > 0);
-
-  //   console.log(Date.now(), "sync done", relay);
-  // }
+  private getUntil() {
+    return this.posts
+      .map((p) => p.event.created_at!)
+      .reduce((pv, cv) => Math.min(pv, cv), Math.floor(Date.now() / 1000));
+  }
 
   private async loadSw() {
-    // FIXME if site settings object changed and list of
-    // hashtags/kinds/authors expanded then we would
-    // need to reset the cache, otherwise we'd load
-    // only a subset of events from cache and not resync really
     const since = await this.loadFromDb(this.maxObjects);
     const now = Math.floor(Date.now() / 1000);
 
@@ -383,33 +381,33 @@ export class NostrStore extends RamStore {
 
     if (synced) {
       // sync forward from since
-      await this.fetchAllObjects(this.maxObjects, since);
+      await this.fetchAllObjects(this.maxObjects, { since });
     } else {
-      // NOTE: instead of this pre-sync, which essentially loads
+      // NOTE: instead of doing some fast pre-sync, which essentially loads
       // the same stuff that iife mode has just loaded, we assume sw
       // is ready and just do the full background sync until the
       // already-loaded post
+
       if (!this.posts.length) {
-        // only do if iife failed
-        // pre-sync 10%
-        await this.fetchAllObjects(100);
+        // only do if iife failed - pre-sync 10%
+        await this.fetchAllObjects(this.maxObjects / 10, {});
       }
 
       // iife has already loaded some recent posts and written them to db,
       // now we should do full sync until the oldest of the recent posts
-      const until = this.posts
-        .map((p) => p.event.created_at!)
-        .reduce((pv, cv) => Math.min(pv, cv), now);
+      const until = this.getUntil();
 
       console.log("sync sw until", until);
 
       // full bg sync since oldest object,
       // only scan UP TO maxObject taking loaded objects into account
       const left = this.maxObjects - this.posts.length;
-      this.fetchAllObjects(left, 0, until, true).then(async () => {
-        // mark as synced
-        await dbi.setSync(this.settings.event.id!);
-      });
+      this.fetchAllObjects(left, { since: 0, until, slow: true }).then(
+        async () => {
+          // mark as synced
+          await dbi.setSync(this.settings.event.id!);
+        }
+      );
     }
 
     // sync forward from 'since'
@@ -417,14 +415,14 @@ export class NostrStore extends RamStore {
   }
 
   private async loadSsr() {
-    await this.fetchAllObjects(this.maxObjects);
+    await this.fetchAllObjects(this.maxObjects, {});
   }
 
   private async loadTab() {
     // load everything from db
     await this.loadFromDb(this.maxObjects);
     // first page load? fetch some from network
-    if (!this.posts.length) await this.fetchAllObjects(100);
+    if (!this.posts.length) await this.fetchAllObjects(50, {});
     // ensure relays
     else await this.fetchRelays();
   }
@@ -453,14 +451,14 @@ export class NostrStore extends RamStore {
     await this.prepare();
   }
 
-  public async load(maxObjects: number = 0) {
+  public async load(maxObjects: number = 0, route?: Route) {
     if (maxObjects) this.maxObjects = maxObjects;
     else this.maxObjects = this.getMaxObjects();
 
     if (this.mode === "iife") {
-      await this.loadIife();
+      await this.loadIife(route);
     } else if (this.mode === "preview") {
-      await this.loadPreview();
+      await this.loadPreview(route);
     } else if (this.mode === "sw") {
       await this.loadSw();
     } else if (this.mode === "ssr") {
@@ -854,8 +852,10 @@ export class NostrStore extends RamStore {
     console.log("fetchObject got", slugId, objectType, event);
     if (!event || !this.matchObject(event.rawEvent())) return undefined;
 
+    // NOTE: this will cause sync process to assume that
+    // we've synched until this event, which is not true
+    // await this.storeEvents([event]);
     await this.parseEvents([event]);
-    await this.storeEvents([event]);
     await this.processBatch();
   }
 
@@ -918,16 +918,20 @@ export class NostrStore extends RamStore {
     }
   }
 
-  private createTagFilters(since?: number, until?: number) {
-    // const limit =
-    //   this.mode !== "iife" && this.mode !== "preview"
-    //     ? Math.min(this.maxObjects, 1000)
-    //     : 50;
-
+  private createTagFilters(
+    since?: number,
+    until?: number,
+    authors?: string[],
+    kinds?: number[],
+    hashtags?: string[]
+  ) {
     // download in batches of 2x of max objects (some of them
-    // we'll drop, i.e. replies), max batch is 300 to make
-    // sure we fit into the default timeout per batch
+    // we'll drop, i.e. replies), max batch is 300 to try
+    // to fit into the default timeout per batch
     const limit = Math.min(this.maxObjects * 2, 300);
+
+    // all pubkeys by default
+    authors = authors || this.settings.contributor_pubkeys;
 
     const filters: NDKFilter[] = [];
     const add = (kind: number, tag?: { tag: string; value: string }) => {
@@ -942,7 +946,7 @@ export class NostrStore extends RamStore {
       if (!f) {
         // first filter for this tag
         f = {
-          authors: this.settings.contributor_pubkeys,
+          authors,
           kinds: [kind],
           limit,
         };
@@ -972,17 +976,24 @@ export class NostrStore extends RamStore {
       }
     };
 
-    let kinds = SUPPORTED_KINDS;
-    if (this.settings.include_kinds?.length)
-      kinds = this.settings.include_kinds
-        .map((k) => parseInt(k))
-        .filter((k) => SUPPORTED_KINDS.includes(k));
+    if (!kinds) {
+      kinds = SUPPORTED_KINDS;
+      if (this.settings.include_kinds?.length)
+        kinds = this.settings.include_kinds
+          .map((k) => parseInt(k))
+          .filter((k) => SUPPORTED_KINDS.includes(k));
+    } else {
+      // filter invalid stuff
+      kinds = kinds.filter((k) => SUPPORTED_KINDS.includes(k));
+    }
 
     const addAll = (tag?: { tag: string; value: string }) => {
-      for (const k of kinds) add(k, tag);
+      for (const k of kinds!) add(k, tag);
     };
 
-    if (this.settings.include_all) {
+    if (hashtags) {
+      for (const t of hashtags) addAll({ tag: "t", value: t });
+    } else if (this.settings.include_all) {
       addAll();
     } else if (this.settings.include_tags?.length) {
       for (const tag of this.settings.include_tags) {

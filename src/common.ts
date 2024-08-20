@@ -79,18 +79,20 @@ export async function renderCurrentPage(
   console.log("addr", addr);
   if (!addr) throw new Error("No nostr site addr");
 
+  path = path || document.location.pathname;
+
   const start = Date.now();
   const renderer = new NostrSiteRenderer();
   await renderer.start({
     addr,
     origin: window.location.origin,
     mode: options?.mode || "iife",
+    currentPath: path,
   });
   const t1 = Date.now();
   console.log("renderer created in ", t1 - start);
 
   // render using hbs and replace document.html
-  path = path || document.location.pathname;
   const { result } = await renderer.render(path);
   //  console.log("result html size", result.length, setHtml);
   const t2 = Date.now();
@@ -582,6 +584,9 @@ export async function scanRelays(
   const batchSize = options && options.batchSize ? options.batchSize : 100;
   filters = Array.isArray(filters) ? filters : [filters];
 
+  // ensure we don't load excessive events
+  filters.forEach((f) => (f.limit = Math.min(limit, f.limit || limit)));
+
   console.log("scan relays", relayUrls, since, until, timeout);
 
   interface Relay {
@@ -725,6 +730,8 @@ export async function scanRelays(
     //   "relay",
     //   relays.find((r) => r.buffer.length && r.buffer[0].id === e!.id)?.url,
     //   "total",
+    //   ids.size,
+    //   "batch",
     //   events.length
     // );
 
@@ -760,7 +767,7 @@ export async function scanRelays(
     // take the next newest event and put to events map
     if (!next()) break;
 
-    // deliver a batch 
+    // deliver a batch
     await onBatch();
   }
 

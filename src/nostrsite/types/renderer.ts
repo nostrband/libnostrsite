@@ -13,8 +13,7 @@ export type RenderMode =
   | "preview" // client-side rendering in a tab for theme preview
   | "sw" // client-side rendering in a service worker
   | "ssr" // server-side rendering
-  | "tab" // client-side renderer in a tab for plugins
-;
+  | "tab"; // client-side renderer in a tab for plugins
 
 export type RenderOptions = {
   addr: SiteAddr;
@@ -26,6 +25,9 @@ export type RenderOptions = {
   site?: NDKEvent;
   theme?: Theme;
   store?: Store;
+  // let renderer know which path we're about to render so that
+  // it could optimize the loading of data for that page
+  currentPath?: string;
 };
 
 // IMPORTANT: any changes here aside from additions will result
