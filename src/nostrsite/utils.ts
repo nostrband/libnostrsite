@@ -6,10 +6,12 @@ import {
   KIND_CONTACTS,
   KIND_RELAYS,
   OUTBOX_RELAYS,
+  Site,
   StoreObject,
   eventId,
 } from ".";
 import { isPost, isTag, isUser } from "../ghost/frontend/utils/checks";
+import { isEqual } from "lodash-es";
 
 export function isBlossomUrl(u: string) {
   try {
@@ -222,8 +224,7 @@ export async function fetchRelays(
       return ga ? -1 : 1;
     });
 
-    if (good.length > maxRelaysPerPubkey)
-      good.length = maxRelaysPerPubkey;
+    if (good.length > maxRelaysPerPubkey) good.length = maxRelaysPerPubkey;
 
     return good;
   };
@@ -240,12 +241,12 @@ export async function fetchRelays(
 
   // merge and dedup all write/read relays
   return {
-    write: [...new Set(
-      [...pubkeyRelays.values()].map(pr => pr.writeRelays).flat()
-    )],
-    read: [...new Set(
-      [...pubkeyRelays.values()].map(pr => pr.readRelays).flat()
-    )],
+    write: [
+      ...new Set([...pubkeyRelays.values()].map((pr) => pr.writeRelays).flat()),
+    ],
+    read: [
+      ...new Set([...pubkeyRelays.values()].map((pr) => pr.readRelays).flat()),
+    ],
   };
 }
 
@@ -393,4 +394,15 @@ export function getUrlMediaMime(u: string) {
     }
   } catch {}
   return "";
+}
+
+export function isEqualContentSettings(a: Site, b: Site) {
+  return (
+    isEqual(a.contributor_pubkeys, b.contributor_pubkeys) &&
+    isEqual(a.include_all, b.include_all) &&
+    isEqual(a.include_kinds, b.include_kinds) &&
+    isEqual(a.include_manual, b.include_manual) &&
+    isEqual(a.include_relays, b.include_relays) &&
+    isEqual(a.include_tags, b.include_tags)
+  );
 }

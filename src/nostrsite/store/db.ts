@@ -159,9 +159,12 @@ export const dbi = {
       return [];
     }
   },
-  deleteEvents: async (ids: string[]) => {
+  deleteEvents: async (ids?: string[]) => {
     try {
-      return await db.events.bulkDelete(ids);
+      if (ids)
+        return await db.events.bulkDelete(ids);
+      else
+        return await db.events.where("kind").notEqual(0).delete();
     } catch (error) {
       console.log(`db deleteEvents error: ${error}`);
       return [];

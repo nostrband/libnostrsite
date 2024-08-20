@@ -22,7 +22,7 @@ import { NostrParser } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
-import { fetchEvent, fetchEvents, isBlossomUrl } from "./utils";
+import { fetchEvent, fetchEvents, isBlossomUrl, isEqualContentSettings } from "./utils";
 import { dbi } from "./store/db";
 import { AssetFetcher, Profile, Store } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
@@ -387,8 +387,20 @@ export class NostrSiteRenderer implements Renderer {
       const sub = this.ndk!.subscribe(filter);
       sub.on("event", async (e: NDKEvent) => {
         if (e.created_at! <= this.settings!.event.created_at) return;
-        console.log("sw got updated site, restarting");
-        if (this.useCache()) await dbi.addEvents([e]);
+        const newSite = this.parser?.parseSite(this.addr, e);
+        console.log("sw got updated site, restarting", newSite);
+        if (!newSite) return;
+
+        if (this.useCache()) {
+          // drop everything (except for profiles) if content
+          // settings have changed
+          if (!isEqualContentSettings(newSite, this.settings!)) {
+            console.log("sw new content settings, reset cache");
+            await dbi.deleteEvents();
+          }
+          // add new site
+          await dbi.addEvents([e]);
+        }
         sub.stop();
         ok();
       });
