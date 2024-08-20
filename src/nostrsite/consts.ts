@@ -16,7 +16,7 @@ export const MAX_OBJECTS_IIFE = 50;
 export const MAX_OBJECTS_PREVIEW = 50;
 export const MAX_OBJECTS_TAB = 1000;
 
-export const DEFAULT_POSTS_PER_PAGE = 6;
+export const DEFAULT_POSTS_PER_PAGE = 8;
 export const POSTS_PER_RSS = 20;
 
 export const OUTBOX_RELAYS = [

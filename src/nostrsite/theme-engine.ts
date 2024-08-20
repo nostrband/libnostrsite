@@ -24,11 +24,8 @@ import {
 } from "./partials/default-partials";
 import merge from "lodash-es/merge";
 import {
-  DEFAULT_POSTS_PER_PAGE,
-  MAX_OBJECTS_SSR,
   Profile,
   RenderOptions,
-  ensureNumber,
   getUrlMediaMime,
   profileId,
 } from ".";
@@ -292,41 +289,6 @@ export class ThemeEngine {
     console.log("rendered", path, "in", Date.now() - start, "ms");
 
     return result;
-  }
-
-  public async getSiteMap(limit?: number) {
-    limit = limit || MAX_OBJECTS_SSR;
-
-    const map: string[] = [];
-    const base = this.settings!.url || "/";
-    const prefix = base.substring(0, base.length - 1);
-    const put = (p: string) => {
-      const path = `${prefix}${p}`;
-      map.push(path);
-    };
-    put("/");
-
-    const posts = (await this.store.list({ type: "posts", limit })).posts;
-
-    // FIXME shouldn't this live in router?
-    // OTOH, object.url is filled in parser, so it's already a mess...
-    const pageLimit =
-      ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
-    for (let i = 1; i <= posts!.length / pageLimit; i++) put(`/page/${i}`);
-
-    for (const p of posts!) {
-      put(p.url);
-    }
-    for (const t of (await this.store.list({ type: "tags", limit: 100 }))
-      .tags!) {
-      put(t.url);
-    }
-    for (const a of (await this.store.list({ type: "authors", limit: 10 }))
-      .authors!) {
-      put(a.url);
-    }
-
-    return map;
   }
 
   private async renderRss(context: Context) {

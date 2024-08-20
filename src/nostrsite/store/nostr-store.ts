@@ -216,8 +216,7 @@ export class NostrStore extends RamStore {
       // make sure we try to load until (before) the current
       // page of results
       let until = undefined;
-      if (context.pagination)
-        until = context.pagination.until - 1;
+      if (context.pagination) until = context.pagination.until - 1;
 
       // create filters for the current route
       const filters = this.createTagFilters({
@@ -429,6 +428,11 @@ export class NostrStore extends RamStore {
         break;
       case "sw":
         await this.fetchForContext(context);
+        break;
+      case "ssr":
+        // make deploy work properly
+        if (context.context.includes("home"))
+          await this.fetchForContext(context);
         break;
     }
   }

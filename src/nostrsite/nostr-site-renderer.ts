@@ -16,6 +16,7 @@ import {
   JQUERY,
   KIND_PACKAGE,
   KIND_SITE,
+  MAX_OBJECTS_SSR,
   OUTBOX_RELAYS,
   POSTS_PER_RSS,
   SITE_RELAY,
@@ -384,10 +385,14 @@ export class NostrSiteRenderer implements Renderer {
       this.precacheMedia(this.caches.mediaCache, media);
   }
 
-  private async loadContextData(route: Route): Promise<Context> {
-    const limit = route.context.includes("rss")
+  private getPageLimit(contexts: string[]) {
+    return contexts.includes("rss")
       ? POSTS_PER_RSS
       : ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
+  }
+
+  private async loadContextData(route: Route): Promise<Context> {
+    const limit = this.getPageLimit(route.context);
 
     const data: Context = {
       context: route.context,
@@ -538,8 +543,11 @@ export class NostrSiteRenderer implements Renderer {
       // since we've just loaded something new, makes sense to try
       // the next page too
       if (context.pagination && context.posts) {
-        if (!context.pagination.next && context.posts.length === context.pagination.limit)
-        context.pagination.next = context.pagination.page + 1;
+        if (
+          !context.pagination.next &&
+          context.posts.length === context.pagination.limit
+        )
+          context.pagination.next = context.pagination.page + 1;
       }
     }
 
@@ -652,7 +660,90 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   public async getSiteMap(limit?: number) {
-    return this.engine!.getSiteMap(limit);
+    if (!this.store) throw new Error("No store");
+
+    limit = limit || MAX_OBJECTS_SSR;
+
+    const map: string[] = [];
+    const base = this.settings!.url || "/";
+    const prefix = base.substring(0, base.length - 1);
+    const put = (p: string) => {
+      const path = `${prefix}${p}`;
+      map.push(path);
+    };
+    put("/");
+
+    const posts = await this.store.list({ type: "posts", limit });
+    console.warn("posts", posts.pagination);
+
+    // FIXME shouldn't this live in router?
+    const pageLimit = this.getPageLimit(["home"]);
+
+    // home pages
+    for (let i = 2; i <= posts.pagination.total / pageLimit; i++)
+      put(`/page/${i}`);
+
+    // notes pages
+    const notes = await this.store.list({
+      type: "posts",
+      kinds: [1],
+      limit: pageLimit,
+    });
+    console.warn("notes", notes.pagination);
+    if (notes.pagination.total) {
+      put("/notes/");
+      for (let i = 2; i <= notes.pagination.pages; i++) put(`/notes/page/${i}`);
+    }
+
+    // posts pages
+    const longPosts = await this.store.list({
+      type: "posts",
+      kinds: [30023],
+      limit: pageLimit,
+    });
+    console.warn("longPosts", longPosts.pagination);
+    if (longPosts.pagination.total) {
+      put("/posts/");
+      for (let i = 2; i <= longPosts.pagination.pages; i++)
+        put(`/posts/page/${i}`);
+    }
+
+    // authors
+    for (const a of (await this.store.list({ type: "authors", limit: 10 }))
+      .authors!) {
+      put(a.url);
+
+      // author pages
+      const r = await this.store.list({
+        type: "posts",
+        author: a.id,
+        limit: pageLimit,
+      });
+      console.warn("author", a.id, r.pagination);
+      for (let i = 2; i <= r.pagination.pages; i++) put(`${a.url}page/${i}`);
+    }
+
+    // tags
+    for (const t of (await this.store.list({ type: "tags", limit: 100 }))
+      .tags!) {
+      put(t.url);
+
+      // tag pages
+      const r = await this.store.list({
+        type: "posts",
+        tag: t.id,
+        limit: pageLimit,
+      });
+      console.warn("tag", t.id, r.pagination);
+      for (let i = 2; i <= r.pagination.pages; i++) put(`${t.url}page/${i}`);
+    }
+
+    // all posts
+    for (const p of posts.posts!) {
+      put(p.url);
+    }
+
+    return map;
   }
 
   public hasRss(path: string) {

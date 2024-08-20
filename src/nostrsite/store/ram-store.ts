@@ -260,7 +260,7 @@ export class RamStore implements Store {
         prev: page > 1 ? page - 1 : null,
         next: end < total ? page + 1 : null,
         until: results
-          .map((p) => p.event!.created_at!)
+          .map((p) => p.event ? p.event.created_at! : 0)
           .reduce((pv, cv) => Math.min(pv, cv), Math.floor(Date.now() / 1000)),
       },
     };
