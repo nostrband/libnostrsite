@@ -6,6 +6,8 @@ import { Pagination } from "./pagination";
 
 export interface Context {
   context: string[];
+  param?: string;
+  param2?: string;
   object?: StoreObject;
   posts?: Post[];
   post?: Post;
@@ -15,6 +17,8 @@ export interface Context {
   pagination?: Pagination;
   mediaUrls: string[];
   hasRss?: boolean;
+  allowRss?: boolean;
   path: string;
   pathBase: string;
+  pathHtml: string;
 }

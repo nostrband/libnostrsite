@@ -44,7 +44,7 @@ export class DefaultRouter implements Router {
     } else if (match("/page/*")) {
       route.context = ["index", "paged"];
       route.param = param("page");
-    } else if (match("/notes/")) {
+    } else if (match("/notes/*")) {
       // /notes/ or /notes/page/:X
       // - kind+index(to reuse index template)+kind:X - page 1
       // - +paged for other pages
@@ -54,7 +54,7 @@ export class DefaultRouter implements Router {
         route.param = param("notes/page");
       }
       // same as /notes/ above
-    } else if (match("/posts/")) {
+    } else if (match("/posts/*")) {
       route.context = ["kind", "kind:30023", "index"];
       if (match("/posts/page/*")) {
         route.context.push("paged");
@@ -98,7 +98,7 @@ export class DefaultRouter implements Router {
 
     if (
       !route.context.includes("home") &&
-      !route.context.find((c) => c.startsWith("kind:")) &&
+      !route.context.includes("kind") &&
       !route.context.includes("error") &&
       !route.param
     ) {

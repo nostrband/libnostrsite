@@ -11,7 +11,7 @@ import {
   eventId,
 } from ".";
 import { isPost, isTag, isUser } from "../ghost/frontend/utils/checks";
-import { isEqual } from "lodash-es";
+import { isEqual, toNumber } from "lodash-es";
 
 export function isBlossomUrl(u: string) {
   try {
@@ -405,4 +405,9 @@ export function isEqualContentSettings(a: Site, b: Site) {
     isEqual(a.include_relays, b.include_relays) &&
     isEqual(a.include_tags, b.include_tags)
   );
+}
+
+export function ensureNumber(v: any | undefined): number | undefined {
+  if (v === undefined) return undefined;
+  return toNumber(v);
 }

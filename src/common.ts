@@ -87,7 +87,6 @@ export async function renderCurrentPage(
     addr,
     origin: window.location.origin,
     mode: options?.mode || "iife",
-    currentPath: path,
   });
   const t1 = Date.now();
   console.log("renderer created in ", t1 - start);
@@ -584,9 +583,6 @@ export async function scanRelays(
   const batchSize = options && options.batchSize ? options.batchSize : 100;
   filters = Array.isArray(filters) ? filters : [filters];
 
-  // ensure we don't load excessive events
-  filters.forEach((f) => (f.limit = Math.min(limit, f.limit || limit)));
-
   console.log("scan relays", relayUrls, since, until, timeout);
 
   interface Relay {
@@ -662,7 +658,7 @@ export async function scanRelays(
           "until",
           r.until,
           "skipped",
-          eventSet.size - r.buffer.length
+          eventSet.size - buffer.length
         );
       };
 

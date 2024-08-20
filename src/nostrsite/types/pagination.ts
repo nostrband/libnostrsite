@@ -4,7 +4,8 @@ export interface Pagination {
   pages: number;
   prev: number | null;
   next: number | null;
-  limit: number,
-  // next: string | null,
-  // prev: string | null
+  limit: number;
+
+  // latest created_at of the matching data set
+  until: number;
 }

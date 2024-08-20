@@ -12,24 +12,37 @@ import { ThemeEngine } from "./theme-engine";
 import { Theme } from "./types/theme";
 import { NostrStore } from "./store/nostr-store";
 import {
+  DEFAULT_POSTS_PER_PAGE,
   JQUERY,
   KIND_PACKAGE,
   KIND_SITE,
   OUTBOX_RELAYS,
+  POSTS_PER_RSS,
   SITE_RELAY,
 } from "./consts";
-import { NostrParser } from "./parser/parser";
+import { NostrParser, PLAY_FEATURE_BUTTON_PREFIX } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
 import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
 import {
+  ensureNumber,
   fetchEvent,
   fetchEvents,
   isBlossomUrl,
   isEqualContentSettings,
 } from "./utils";
 import { dbi } from "./store/db";
-import { AssetFetcher, Profile, Route, Store } from ".";
+import {
+  AssetFetcher,
+  Author,
+  Context,
+  Post,
+  Profile,
+  Route,
+  Router,
+  Store,
+  Tag,
+} from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
 import { fetchNostrSite, getCachedSite } from "..";
 import { nip19 } from "nostr-tools";
@@ -46,6 +59,7 @@ export class NostrSiteRenderer implements Renderer {
   private caches?: ServiceWorkerCaches;
   public store?: Store;
   private parser?: NostrParser;
+  private router?: Router;
   private config?: any;
   private hasStarted: boolean = false;
   private preloaded = new Set<string>();
@@ -289,14 +303,13 @@ export class NostrSiteRenderer implements Renderer {
     else await this.fetchTheme();
 
     // we need it for the store
-    const router = new DefaultRouter(this.settings);
+    this.router = new DefaultRouter(this.settings);
 
     // now we have everything needed to init the engine
     await this.engine.init(
       settings,
       [this.theme!],
       this.config,
-      router,
       undefined,
       this.assetFetcher
     );
@@ -311,16 +324,8 @@ export class NostrSiteRenderer implements Renderer {
     }
 
     // load the store if not provided externally
-    if (!options.store) {
-      let route: Route | undefined = undefined;
-      if (options.currentPath)
-        route = router.route(options.currentPath);
-
-      await (this.store as NostrStore).load(
-        options.maxObjects,
-        route
-      );
-    }
+    if (!options.store)
+      await (this.store as NostrStore).load(options.maxObjects);
 
     // do it in parallel to save some latency
     // await Promise.all([
@@ -360,7 +365,6 @@ export class NostrSiteRenderer implements Renderer {
       [this.theme!],
       this.config,
       undefined,
-      undefined,
       this.assetFetcher
     );
 
@@ -380,11 +384,172 @@ export class NostrSiteRenderer implements Renderer {
       this.precacheMedia(this.caches.mediaCache, media);
   }
 
+  private async loadContextData(route: Route): Promise<Context> {
+    const limit = route.context.includes("rss")
+      ? POSTS_PER_RSS
+      : ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
+
+    const data: Context = {
+      context: route.context,
+      mediaUrls: [],
+      hasRss: route.hasRss,
+      path: route.path,
+      pathBase: route.pathBase,
+      pathHtml: route.pathHtml,
+      param: route.param,
+      param2: route.param2,
+    };
+
+    // home, kind feeds
+    if (route.context.includes("index")) {
+      const isKindFeed = route.context.includes("kind");
+
+      let hashtags = undefined;
+      let kinds = undefined;
+
+      if (isKindFeed) {
+        // kinds feed
+        kinds = route.context
+          .filter((c) => c.startsWith("kind:"))
+          .map((c) => parseInt(c.split("kind:")[1]));
+      } else {
+        // home feed
+        hashtags = this.settings!.homepage_tags
+          ? this.settings!.homepage_tags.filter((t) => t.tag === "t").map((t) =>
+              t.value.toLocaleLowerCase()
+            )
+          : undefined;
+        kinds = this.settings!.homepage_kinds
+          ? this.settings!.homepage_kinds.map((k) => parseInt(k))
+          : undefined;
+      }
+
+      const pageNum = route.context.includes("paged")
+        ? parseInt(route.param!)
+        : undefined;
+
+      const list = await this.store!.list({
+        type: "posts",
+        kinds,
+        hashtags,
+        page: pageNum,
+        limit,
+      });
+      data.posts = list.posts;
+      data.pagination = list.pagination;
+    } else if (route.context.includes("post")) {
+      const slugId = route.param!;
+      data.object = await this.store!.get(slugId, "posts");
+      data.post = data.object as Post;
+      if (
+        data.post &&
+        data.post.feature_image?.startsWith(PLAY_FEATURE_BUTTON_PREFIX)
+      ) {
+        data.post = { ...data.post, feature_image: null };
+      }
+      data.page = {
+        show_title_and_feature_image: data.post
+          ? data.post.show_title_and_feature_image
+          : true,
+      };
+    } else if (route.context.includes("tag")) {
+      const slugId = route.param!;
+      data.object = await this.store!.get(slugId, "tags");
+      data.tag = data.object as Tag;
+      if (data.tag) {
+        const pageNum = route.context.includes("paged")
+          ? parseInt(route.param2!)
+          : undefined;
+        const list = await this.store!.list({
+          type: "posts",
+          tag: data.tag.id,
+          page: pageNum,
+        });
+        data.posts = list.posts;
+        data.pagination = list.pagination;
+      }
+    } else if (route.context.includes("author")) {
+      const slugId = route.param!;
+      data.object = await this.store!.get(slugId, "authors");
+      data.author = data.object as Author;
+      if (data.author) {
+        const pageNum = route.context.includes("paged")
+          ? parseInt(route.param2!)
+          : undefined;
+        const list = await this.store!.list({
+          type: "posts",
+          author: data.author.id,
+          page: pageNum,
+        });
+        data.posts = list.posts;
+        data.pagination = list.pagination;
+      }
+    } else {
+      // FIXME find a static page matching the path
+      console.log("bad path");
+    }
+
+    // FIXME assets from other objects?
+    if (data.posts) {
+      // @ts-ignore
+      data.mediaUrls.push(
+        ...data.posts.map((p) => p.feature_image || "").filter((i) => !!i)
+      );
+    }
+    if (data.post) data.mediaUrls.push(...data.post.images);
+
+    if (
+      !route.context.includes("error") &&
+      !route.context.includes("home") &&
+      !route.context.find((c) => c.startsWith("kind:")) &&
+      !route.context.includes("paged") &&
+      !data.object
+    ) {
+      console.log("object not found", { route });
+      data.context = ["error"];
+    }
+
+    data.allowRss = this.options!.mode === "ssr";
+
+    return data;
+  }
+
   public async render(path: string) {
-    const allowRss = this.options!.mode === "ssr";
-    const r = await this.engine!.render(path, allowRss);
-    this.precacheUrls(r.context.mediaUrls);
-    return r;
+    const route = this.router!.route(path);
+
+    // NOTE: context.context might differ from route.context
+    // due to 404 Not Found errors etc
+    let context = await this.loadContextData(route);
+
+    // if routed object not found, or we don't have a full page of data,
+    // try forcing the store to load more stuff
+    if (
+      context.context.includes("error") ||
+      (context.pagination && context.posts!.length < context.pagination.limit)
+    ) {
+      // force store to fetch data for this route
+      await this.store!.update(context);
+
+      // now that hopefully store has tried to load some data
+      // for this route, we will try again
+      context = await this.loadContextData(route);
+
+      // force next page attempt if number of posts === limit,
+      // since we've just loaded something new, makes sense to try
+      // the next page too
+      if (context.pagination && context.posts) {
+        if (!context.pagination.next && context.posts.length === context.pagination.limit)
+        context.pagination.next = context.pagination.page + 1;
+      }
+    }
+
+    // start fetching media while we're rendering
+    this.precacheUrls(context.mediaUrls);
+
+    // render
+    const result = await this.engine!.render(context);
+
+    return { result, context };
   }
 
   public async renderPartial(template: string, self: any, data: any) {
@@ -490,12 +655,12 @@ export class NostrSiteRenderer implements Renderer {
     return this.engine!.getSiteMap(limit);
   }
 
-  public isRss(path: string) {
-    return this.engine!.isRss(path);
+  public hasRss(path: string) {
+    return !!this.router!.route(path).hasRss;
   }
 
-  public hasRss(path: string) {
-    return this.engine!.hasRss(path);
+  public isRss(path: string) {
+    return !!this.router!.route(path).context.includes("rss");
   }
 
   public prepareRelays(options?: any) {

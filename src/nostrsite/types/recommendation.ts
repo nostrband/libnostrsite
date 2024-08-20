@@ -1,3 +1,5 @@
+import { NDKEvent } from "@nostr-dev-kit/ndk";
+
 export interface Recommendation {
   id: string,
   url: string,
@@ -7,4 +9,6 @@ export interface Recommendation {
 
   // for compat with other store objects
   slug: string,
+
+  event: NDKEvent;
 }

@@ -1,4 +1,4 @@
-import { Profile } from ".";
+import { Context, Profile } from ".";
 import { Author } from "./author";
 import { Pagination } from "./pagination";
 import { Post } from "./post";
@@ -53,6 +53,7 @@ export interface StoreListRequest {
 
 export interface Store {
   prepare(getUrl: (o: StoreObject) => string): Promise<void>;
+  update(context: Context): Promise<void>;
   isValidType(type: string): boolean;
   list: (request: StoreListRequest) => Promise<StoreListResponse>;
   get: (

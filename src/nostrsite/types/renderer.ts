@@ -25,9 +25,6 @@ export type RenderOptions = {
   site?: NDKEvent;
   theme?: Theme;
   store?: Store;
-  // let renderer know which path we're about to render so that
-  // it could optimize the loading of data for that page
-  currentPath?: string;
 };
 
 // IMPORTANT: any changes here aside from additions will result

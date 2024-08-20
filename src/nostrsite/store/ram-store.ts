@@ -1,4 +1,4 @@
-import { normalizeId } from "..";
+import { Context, normalizeId } from "..";
 import { DEFAULT_MAX_LIMIT } from "../consts";
 import { Author } from "../types/author";
 import { Post } from "../types/post";
@@ -24,6 +24,7 @@ export class RamStore implements Store {
 
   public async prepare(_: (o: StoreObject) => string) {}
   public destroy() {}
+  public async update(_: Context) {}
 
   protected async fetchObject(
     slugId: string,
@@ -235,10 +236,8 @@ export class RamStore implements Store {
     }
 
     const total = results.length;
-    const perPage = Math.min(
-      total,
-      req.limit || Math.min(total, DEFAULT_MAX_LIMIT)
-    );
+    const limit = req.limit || DEFAULT_MAX_LIMIT;
+    const perPage = Math.min(total, limit);
     const page = req.page && req.page > 0 ? req.page : 1;
     const pages = Math.ceil(total / perPage);
     let start = (page - 1) * perPage;
@@ -257,9 +256,12 @@ export class RamStore implements Store {
         total,
         page,
         pages,
-        limit: perPage,
+        limit,
         prev: page > 1 ? page - 1 : null,
         next: end < total ? page + 1 : null,
+        until: results
+          .map((p) => p.event!.created_at!)
+          .reduce((pv, cv) => Math.min(pv, cv), Math.floor(Date.now() / 1000)),
       },
     };
 

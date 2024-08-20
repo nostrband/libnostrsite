@@ -10,17 +10,12 @@ import localUtils from "../ghost/frontend/services/theme-engine/handlebars/utils
 import { NostrSiteUrlUtils } from "./modules/urlutils";
 import { ImageUtils } from "./modules/images";
 import { urlHelpers } from "./modules/config-url-helpers";
-import { Post } from "./types/post";
-import { Tag } from "./types/tag";
-import { Author } from "./types/author";
 import { Theme } from "./types/theme";
 import { UrlService } from "./modules/urlservice";
 import { Context } from "./types/context";
 import { Templater } from "./types/templater";
 import { DefaultTemplater } from "./modules/default-templater";
 import { Store } from "./types/store";
-import { Route, Router } from "./types/router";
-import { DefaultRouter } from "./modules/default-router";
 import { AssetFetcher } from "./types/asset-fetcher";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
 import {
@@ -28,25 +23,17 @@ import {
   DEFAULT_PARTIALS_DIR_NAME,
 } from "./partials/default-partials";
 import merge from "lodash-es/merge";
-import toNumber from "lodash-es/toNumber";
 import {
+  DEFAULT_POSTS_PER_PAGE,
   MAX_OBJECTS_SSR,
-  PLAY_FEATURE_BUTTON_PREFIX,
   Profile,
   RenderOptions,
+  ensureNumber,
   getUrlMediaMime,
   profileId,
 } from ".";
 import { templates } from "../ghost/frontend/services/theme-engine/handlebars/template";
 import { DateTime } from "luxon";
-
-const DEFAULT_POSTS_PER_PAGE = 6;
-const POSTS_PER_RSS = 20;
-
-function ensureNumber(v: any | undefined): number | undefined {
-  if (v === undefined) return undefined;
-  return toNumber(v);
-}
 
 export class ThemeEngine {
   private readonly hbs;
@@ -56,7 +43,6 @@ export class ThemeEngine {
   private store: Store;
   private settings?: Site;
   private theme?: Theme;
-  private router?: Router;
   private templater?: Templater;
   private assetFetcher?: AssetFetcher;
 
@@ -115,7 +101,6 @@ export class ThemeEngine {
     settings: Site,
     themes: Theme[],
     cfg: any,
-    router?: Router,
     templater?: Templater,
     assetFetcher?: AssetFetcher
   ) {
@@ -123,7 +108,6 @@ export class ThemeEngine {
     this.theme = themes[0];
     if (!this.theme) throw new Error("No themes provided");
 
-    this.router = router || new DefaultRouter(this.settings);
     this.templater = templater || new DefaultTemplater(this.theme);
     this.assetFetcher = assetFetcher || new DefaultAssetFetcher();
     this.urlUtils = new NostrSiteUrlUtils(cfg);
@@ -287,193 +271,27 @@ export class ThemeEngine {
     );
   }
 
-  private async loadContextData(route: Route): Promise<Context> {
-    const limit = route.context.includes("rss")
-      ? POSTS_PER_RSS
-      : ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
-
-    const data: Context = {
-      context: route.context,
-      mediaUrls: [],
-      hasRss: route.hasRss,
-      path: route.path,
-      pathBase: route.pathBase,
-    };
-
-    // home, kind feeds
-    if (route.context.includes("index")) {
-      const isKindFeed = route.context.includes("kind");
-
-      let hashtags = undefined;
-      let kinds = undefined;
-
-      if (isKindFeed) {
-        // kinds feed
-        kinds = route.context
-          .filter((c) => c.startsWith("kind:"))
-          .map((c) => parseInt(c.split("kind:")[1]));
-      } else {
-        // home feed
-        hashtags = this.settings!.homepage_tags
-          ? this.settings!.homepage_tags.filter((t) => t.tag === "t").map((t) =>
-              t.value.toLocaleLowerCase()
-            )
-          : undefined;
-        kinds = this.settings!.homepage_kinds
-          ? this.settings!.homepage_kinds.map((k) => parseInt(k))
-          : undefined;
-      }
-
-      const pageNum = route.context.includes("paged")
-        ? parseInt(route.param!)
-        : undefined;
-
-      const list = await this.store.list({
-        type: "posts",
-        kinds,
-        hashtags,
-        page: pageNum,
-        limit,
-      });
-      data.posts = list.posts;
-      data.pagination = list.pagination;
-      // } else if (route.context.includes("index")) {
-      //   // paged or kind:* (except for home above)
-      //   const pageNum = route.context.includes("paged")
-      //     ? parseInt(route.param!)
-      //     : undefined;
-      //   const kinds = route.context
-      //     .filter((c) => c.startsWith("kind:"))
-      //     .map((c) => parseInt(c.split("kind:")[1]));
-      //   const list = await this.store.list({
-      //     type: "posts",
-      //     page: pageNum,
-      //     kinds,
-      //     limit,
-      //   });
-      //   data.posts = list.posts;
-      //   data.pagination = list.pagination;
-      // } else if (route.context.includes("paged")) {
-      //   const pageNum = parseInt(route.param!);
-      //   const list = await this.store.list({
-      //     type: "posts",
-      //     page: pageNum,
-      //     limit,
-      //   });
-      //   data.posts = list.posts;
-      //   data.pagination = list.pagination;
-    } else if (route.context.includes("post")) {
-      const slugId = route.param!;
-      data.object = await this.store.get(slugId, "posts");
-      data.post = data.object as Post;
-      if (
-        data.post &&
-        data.post.feature_image?.startsWith(PLAY_FEATURE_BUTTON_PREFIX)
-      ) {
-        data.post = { ...data.post, feature_image: null };
-      }
-      data.page = {
-        show_title_and_feature_image: data.post
-          ? data.post.show_title_and_feature_image
-          : true,
-      };
-    } else if (route.context.includes("tag")) {
-      const slugId = route.param!;
-      data.object = await this.store.get(slugId, "tags");
-      data.tag = data.object as Tag;
-      if (data.tag) {
-        const pageNum = route.context.includes("paged")
-          ? parseInt(route.param2!)
-          : undefined;
-        const list = await this.store.list({
-          type: "posts",
-          tag: data.tag.id,
-          page: pageNum,
-        });
-        data.posts = list.posts;
-        data.pagination = list.pagination;
-      }
-    } else if (route.context.includes("author")) {
-      const slugId = route.param!;
-      data.object = await this.store.get(slugId, "authors");
-      data.author = data.object as Author;
-      if (data.author) {
-        const pageNum = route.context.includes("paged")
-          ? parseInt(route.param2!)
-          : undefined;
-        const list = await this.store.list({
-          type: "posts",
-          author: data.author.id,
-          page: pageNum
-        });
-        data.posts = list.posts;
-        data.pagination = list.pagination;
-      }
-    } else {
-      // FIXME find a static page matching the path
-      console.log("bad path");
-    }
-
-    // FIXME assets from other objects?
-    if (data.posts) {
-      // @ts-ignore
-      data.mediaUrls.push(
-        ...data.posts.map((p) => p.feature_image || "").filter((i) => !!i)
-      );
-    }
-    if (data.post) data.mediaUrls.push(...data.post.images);
-
-    if (
-      !route.context.includes("error") &&
-      !route.context.includes("home") &&
-      !route.context.find((c) => c.startsWith("kind:")) &&
-      !route.context.includes("paged") &&
-      !data.object
-    ) {
-      console.log("object not found", { route });
-      data.context = ["error"];
-    }
-
-    return data;
-  }
-
   public async render(
-    path: string,
-    allowRss: boolean
-  ): Promise<{ result: string; context: Context }> {
+    context: Context
+  ): Promise<string> {
     const start = Date.now();
-    console.log("render", path);
-
-    // parse the url into "Ghost context" and param
-    const route = this.router!.route(path);
-
-    // NOTE: context.context might differ from route.context
-    // due to 404 Not Found errors etc
-    const context = await this.loadContextData(route);
+    console.log("render", context);
 
     let result = "";
-    if (allowRss && context.context.includes("rss") && context.posts) {
+    if (context.allowRss && context.context.includes("rss") && context.posts) {
       // rss
-      result = await this.renderRss(route, context.posts);
+      result = await this.renderRss(context);
     } else {
       // html
       const template = this.templater!.template(context);
 
-      console.log("context data", { route, context, template });
+      console.log("context data", { context, template });
 
       result = await this.renderTemplate(template, context);
     }
     console.log("rendered", path, "in", Date.now() - start, "ms");
 
-    return { result, context };
-  }
-
-  public hasRss(path: string) {
-    return !!this.router!.route(path).hasRss;
-  }
-
-  public isRss(path: string) {
-    return !!this.router!.route(path).context.includes("rss");
+    return result;
   }
 
   public async getSiteMap(limit?: number) {
@@ -511,8 +329,11 @@ export class ThemeEngine {
     return map;
   }
 
-  private async renderRss(route: Route, posts: Post[]) {
+  private async renderRss(context: Context) {
     if (!this.settings) return "";
+
+    const posts = context.posts;
+
     const url = this.settings.origin + this.settings.url;
     const prefix = url.substring(0, url.length - 1);
     const link = (p: string) => {
@@ -538,8 +359,8 @@ export class ThemeEngine {
     };
 
     const admin = await getName(this.settings.admin_pubkey);
-    const feedUrl = prefix + route.path;
-    const htmlUrl = prefix + route.pathHtml;
+    const feedUrl = prefix + context.path;
+    const htmlUrl = prefix + context.pathHtml;
     let rss = `<rss
       xmlns:atom="http://www.w3.org/2005/Atom"
       xmlns:media="http://search.yahoo.com/mrss/"
