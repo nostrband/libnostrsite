@@ -700,10 +700,22 @@ export class NostrParser {
     post.html = dom("body").html();
 
     // replace hashtags with links too
-    for (const t of post.tags) {
-      const rx = new RegExp(`#${t.name}`, "gi");
-      // console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
-      post.html = post.html!.replace(rx, `<a href='${t.url}'>#${t.name}</a>`);
+    const tags = [...post.tags];
+    // sort desc by length
+    tags.sort((a, b) => b.name.length - a.name.length);
+    for (const t of tags) {
+      // idk how to make it not this dumb to avoid double-replacing
+      // hashtags, like #kino after #kinostr
+      const rxs = [
+        // FIXME \b doesn't consume anything and just indicates "non-word chars",
+        // but it's ascii only, so probably won't work
+        // for non-ascii hashtags?
+        new RegExp(`\\b(${t.name})\\b`, "gi"),
+      ];
+      for (const rx of rxs) {
+        // console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
+        post.html = post.html!.replace(rx, `<a href='${t.url}'>$&</a>`);
+      }
     }
   }
 

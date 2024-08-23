@@ -83,7 +83,7 @@ export default function content(options: any = {}) {
   //   }
   // }
 
-  console.log("content self html", self.html);
+  console.log("content self html", self, self.html);
   if (self.html === null) {
     self.html = "";
   }

@@ -604,6 +604,17 @@ export async function scanRelays(
     const prefetches = [];
     const promises = new Set();
 
+    const addFetchHandler = (promise: Promise<void>) => {
+      promise
+        .catch((e) => {
+          console.log("scan failed", e);
+        })
+        .finally(() => {
+          promises.delete(promise);
+          console.log(Date.now(), "scan done promise, left", promises.size);
+        });
+    };
+
     for (const r of relays) {
       // no need to fetch/prefetch?
       if (!r.until || r.buffer.length > 100) continue;
@@ -611,7 +622,10 @@ export async function scanRelays(
       // already prefetching
       if (r.prefetchPromise) {
         // if we're empty wait for prefetch
-        if (!r.buffer.length) promises.add(r.prefetchPromise);
+        if (!r.buffer.length) {
+          addFetchHandler(r.prefetchPromise);
+          promises.add(r.prefetchPromise);
+        }
         continue;
       }
 
@@ -673,12 +687,11 @@ export async function scanRelays(
       if (promises.size < MAX_BATCH_SIZE) {
         const f = fetches.shift()!;
         const promise = f();
+        addFetchHandler(promise);
         promises.add(promise);
-        promise.then(() => {
-          promises.delete(promise);
-          console.log(Date.now(), "scan done promise, left", promises.size);
-        });
       }
+
+      // when any promise finishes it deletes itself from promises set
       if (promises.size >= MAX_BATCH_SIZE) await Promise.race([...promises]);
     }
     if (promises.size) await Promise.all([...promises]);
@@ -690,15 +703,19 @@ export async function scanRelays(
       const promise = f.fetcher();
       prefetchPromises.add(promise);
       f.relay.prefetchPromise = promise;
-      promise.then(() => {
-        prefetchPromises.delete(promise);
-        f.relay.prefetchPromise = undefined;
-        console.log(
-          Date.now(),
-          "scan done prefetch, left",
-          prefetchPromises.size
-        );
-      });
+      promise
+        .catch((e) => {
+          console.log("scan prefetch failed", e, f.relay.url);
+        })
+        .finally(() => {
+          prefetchPromises.delete(promise);
+          f.relay.prefetchPromise = undefined;
+          console.log(
+            Date.now(),
+            "scan done prefetch, left",
+            prefetchPromises.size
+          );
+        });
     }
   };
 
