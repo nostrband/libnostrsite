@@ -725,7 +725,7 @@ export class NostrParser {
   }
 
   public parseHashtags(e: NDKEvent): string[] {
-    return tags(e, "t").map((tv) => tv[1]);
+    return [...new Set(tags(e, "t").map((tv) => tv[1]))];
   }
 
   public parseProfile(e: NDKEvent): Profile {
