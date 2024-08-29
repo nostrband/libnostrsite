@@ -713,7 +713,7 @@ export class NostrParser {
         new RegExp(`\\b(${t.name})\\b`, "gi"),
       ];
       for (const rx of rxs) {
-        // console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
+        console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
         post.html = post.html!.replace(rx, `<a href='${t.url}'>$&</a>`);
       }
     }

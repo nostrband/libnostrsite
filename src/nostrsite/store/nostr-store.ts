@@ -502,18 +502,22 @@ export class NostrStore extends RamStore {
   private async parsePostTags(post: Post, e: NDKEvent) {
     const allowed = (this.settings.config.get("hashtags") || "")
       .split(",")
-      .filter((t) => !!t);
+      .filter((t) => !!t)
+      .map(t => t.toLocaleLowerCase());
 
     // ensure tags
-    for (const tagName of this.parser.parseHashtags(e)) {
-      if (allowed.length && !allowed.includes(tagName)) continue;
+    const hashtags = this.parser.parseHashtags(e);
+    console.log("parseHashtags", post.id, hashtags);
+    for (const tagName of hashtags) {
+      const tagId = tagName.toLocaleLowerCase();
+      if (allowed.length && !allowed.includes(tagId)) continue;
 
-      const existingTag = this.tags.find((t) => t.id === tagName);
+      const existingTag = this.tags.find((t) => t.id === tagId);
       const tag: Tag = existingTag || {
         type: "tag",
-        id: tagName,
+        id: tagId,
         url: "",
-        slug: slugify(tagName),
+        slug: slugify(tagId),
         name: tagName,
         description: null,
         meta_title: null,
@@ -525,10 +529,8 @@ export class NostrStore extends RamStore {
       };
 
       if (!existingTag) this.tags.push(tag);
-
-      tag.postIds.push(post.id);
-
-      post.tags.push(tag);
+      if (!tag.postIds.includes(post.id)) tag.postIds.push(post.id);
+      if (!post.tags.find(t => t.id === tagId)) post.tags.push(tag);
       if (!post.primary_tag) post.primary_tag = tag;
     }
   }
