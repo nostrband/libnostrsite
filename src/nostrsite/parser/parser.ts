@@ -599,7 +599,9 @@ export class NostrParser {
 
     post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
-    post.html = await marked.parse(post.markdown);
+    post.html = await marked.parse(post.markdown, {
+      breaks: true // convert \n to <br>
+    });
 
     await this.embedLinks(store, post);
   }
