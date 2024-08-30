@@ -83,7 +83,7 @@ export default function content(options: any = {}) {
   //   }
   // }
 
-  console.log("content self html", self, self.html);
+  // console.log("content self html", self, self.html);
   if (self.html === null) {
     self.html = "";
   }
@@ -98,7 +98,7 @@ export default function content(options: any = {}) {
   //   html = downsize(self.html, truncateOptions);
 
   html = `<np-content id="${self.id}">${html}</np-content>`;
-  console.log("content html", html);
+  // console.log("content html", html);
 
   // some contributor relays to fetch their replies
   const relays = [
@@ -109,6 +109,7 @@ export default function content(options: any = {}) {
     ]),
   ];
   if (relays.length > 10) relays.length = 10;
+  console.log("zapthreads relays", relays, site);
 
   if (site.config.get("no_default_plugins") !== "true") {
     // FIXME replace w/ HBS template to avoid code injection

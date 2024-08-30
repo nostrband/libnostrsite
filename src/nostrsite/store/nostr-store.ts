@@ -139,6 +139,10 @@ export class NostrStore extends RamStore {
     return since;
   }
 
+  public async prepareSettings() {
+    await this.fetchRelays();
+  }
+
   private async fetchRelays() {
     // already known?
     if (
@@ -503,7 +507,7 @@ export class NostrStore extends RamStore {
     const allowed = (this.settings.config.get("hashtags") || "")
       .split(",")
       .filter((t) => !!t)
-      .map(t => t.toLocaleLowerCase());
+      .map((t) => t.toLocaleLowerCase());
 
     // ensure tags
     const hashtags = this.parser.parseHashtags(e);
@@ -530,7 +534,7 @@ export class NostrStore extends RamStore {
 
       if (!existingTag) this.tags.push(tag);
       if (!tag.postIds.includes(post.id)) tag.postIds.push(post.id);
-      if (!post.tags.find(t => t.id === tagId)) post.tags.push(tag);
+      if (!post.tags.find((t) => t.id === tagId)) post.tags.push(tag);
       if (!post.primary_tag) post.primary_tag = tag;
     }
   }

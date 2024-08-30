@@ -24,7 +24,12 @@ import {
 import { NostrParser, PLAY_FEATURE_BUTTON_PREFIX } from "./parser/parser";
 // import { theme, theme1, theme2, theme3 } from "../sample-themes";
 import { SiteAddr } from "./types/site-addr";
-import { RenderOptions, Renderer, ServiceWorkerCaches } from "./types/renderer";
+import {
+  RenderMode,
+  RenderOptions,
+  Renderer,
+  ServiceWorkerCaches,
+} from "./types/renderer";
 import {
   ensureNumber,
   fetchEvent,
@@ -254,6 +259,13 @@ export class NostrSiteRenderer implements Renderer {
     if ("document" in globalThis) this.preloadThemeAssets(this.theme);
   }
 
+  private async createStore(mode: RenderMode | undefined, settings: Site) {
+    const store = new NostrStore(mode, this.ndk!, settings, this.parser!);
+    // fetch relays and place back to settings, etc
+    await store.prepareSettings();
+    return store;
+  }
+
   public async start(options: RenderOptions) {
     console.log("renderer options", options);
     this.addr = options.addr;
@@ -293,8 +305,7 @@ export class NostrSiteRenderer implements Renderer {
 
     // event store
     this.store =
-      options.store ||
-      new NostrStore(options.mode, this.ndk!, settings, this.parser);
+      options.store || (await this.createStore(options.mode, settings));
 
     // templating
     this.engine = new ThemeEngine(this.store, options);
