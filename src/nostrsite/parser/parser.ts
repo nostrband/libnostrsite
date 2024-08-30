@@ -712,7 +712,7 @@ export class NostrParser {
         // FIXME \b doesn't consume anything and just indicates "non-word chars",
         // but it's ascii only, so probably won't work
         // for non-ascii hashtags?
-        new RegExp(`\\b(${t.name})\\b`, "gi"),
+        new RegExp(`(#${t.name})\\b`, "gi"),
       ];
       for (const rx of rxs) {
         console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
