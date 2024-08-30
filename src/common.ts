@@ -544,8 +544,10 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
             `${css}${propertyName}:${styles.getPropertyValue(propertyName)};`
         );
       }
-      // override position
-      div.style.cssText = cssText + "; position: relative";
+      // ensure it's positioned, so that the position:absolute child
+      // we created above could be placed properly
+      if (!cssText.includes("position:")) cssText += "; position: relative";
+      div.style.cssText = cssText;
       // effects
       div.style.opacity = "1";
       div.style.visibility = "visible";
