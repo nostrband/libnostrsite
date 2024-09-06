@@ -1,6 +1,7 @@
 export const KIND_PROFILE = 0;
 export const KIND_CONTACTS = 3;
 export const KIND_RELAYS = 10002;
+export const KIND_PINNED = 10001;
 export const KIND_SITE = 30512;
 export const KIND_THEME = 30514;
 export const KIND_PACKAGE = 1036;
@@ -25,15 +26,11 @@ export const OUTBOX_RELAYS = [
   "wss://relay.nos.social/",
 ];
 
-export const FALLBACK_OUTBOX_RELAYS = [
-  "wss://relay.nostr.band/all"
-];
+export const FALLBACK_OUTBOX_RELAYS = ["wss://relay.nostr.band/all"];
 
 export const SITE_RELAY = "wss://relay.npubpro.com/";
 
-export const BLACKLISTED_RELAYS = [
-  "wss://brb.io/"
-];
+export const BLACKLISTED_RELAYS = ["wss://brb.io/"];
 
 export const GOOD_RELAYS = [
   "wss://relay.damus.io/",
@@ -46,18 +43,23 @@ export const GOOD_RELAYS = [
 ];
 
 export const JS_JQUERY = "https://code.jquery.com/jquery-3.5.1.min.js";
-export const JS_VENOBOX = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
-export const CSS_VENOBOX = "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
+export const JS_VENOBOX =
+  "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
+export const CSS_VENOBOX =
+  "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
 export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.5.6.js";
-export const JS_NOSTR_LOGIN = "https://unpkg.com/nostr-login@1.6.3/dist/unpkg.js";
-export const JS_SEARCH = "https://unpkg.com/nostr-site-search@1.0.12/dist/index.js";
+export const JS_NOSTR_LOGIN =
+  "https://unpkg.com/nostr-login@1.6.4/dist/unpkg.js";
+export const JS_SEARCH =
+  "https://unpkg.com/nostr-site-search@1.0.12/dist/index.js";
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
-export const JS_CONTENT_CTA = "https://cdn.npubpro.com/content-cta.iife.1.0.2.js";
+export const JS_CONTENT_CTA =
+  "https://cdn.npubpro.com/content-cta.iife.1.0.2.js";
 
 export const BLOSSOM_FALLBACKS = [
   "https://blossom.npubpro.com",
-  "https://cdn.hzrd149.com"
+  "https://cdn.hzrd149.com",
 ];
 
 export const PRECACHE_ENTRIES = [
@@ -70,5 +72,5 @@ export const PRECACHE_ENTRIES = [
   JS_SEARCH,
   JS_ZAP,
   JS_EMBEDS,
-  JS_CONTENT_CTA
+  JS_CONTENT_CTA,
 ];

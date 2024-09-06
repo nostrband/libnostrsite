@@ -19,6 +19,7 @@ export class RamStore implements Store {
   protected profiles: Profile[] = [];
   protected recommendations: Recommendation[] = [];
   protected related: Post[] = [];
+  protected pins: string[] = [];
 
   constructor() {}
 
@@ -147,7 +148,12 @@ export class RamStore implements Store {
         if (toLower) return filter.map((f) => f.toLocaleLowerCase());
         else return filter;
       };
+      const parseFilterValue = (prefix: string) => {
+        const filter = parseFilter(prefix);
+        return filter.length ? filter[0] : "";
+      }
 
+      const featured = parseFilterValue("featured") === 'true';
       const slugs = parseFilter("slug");
       let tags = req.hashtags;
       if (!tags) tags = parseFilter("tag", true);
@@ -166,6 +172,7 @@ export class RamStore implements Store {
         authors,
         primary_tags,
         primary_authors,
+        featured
       });
 
       switch (type) {
@@ -173,6 +180,7 @@ export class RamStore implements Store {
           results.push(
             ...this.posts.filter(
               (p) =>
+                (!featured || !this.pins.length || p.featured) &&
                 (!slugs.length || slugs.includes(p.slug)) &&
                 (!tags!.length ||
                   p.tags.find(

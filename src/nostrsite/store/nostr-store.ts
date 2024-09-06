@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_LIMIT,
   KIND_LONG_NOTE,
   KIND_NOTE,
+  KIND_PINNED,
   KIND_PROFILE,
   MAX_OBJECTS_IIFE,
   MAX_OBJECTS_PREVIEW,
@@ -53,6 +54,7 @@ export class NostrStore extends RamStore {
   private fetchedRelays?: boolean;
   private getUrlCb?: (o: StoreObject) => string;
   private fetchContextDone = new Set<string>();
+  private pinsFetched = false;
 
   constructor(
     mode: RenderMode = "iife",
@@ -186,6 +188,46 @@ export class NostrStore extends RamStore {
     console.log("contributor outbox relays", this.settings.contributor_relays);
   }
 
+  private async fetchPins() {
+    if (!this.pins.length) return;
+    if (this.pinsFetched) return;
+
+    this.pinsFetched = true;
+
+    const pins = this.pins.filter(
+      (p) => !this.posts.find((post) => post.id === p)
+    );
+
+    const idsFilter: NDKFilter = {
+      ids: pins
+        .map((p) => nip19.decode(p))
+        .filter((p) => p.type === "note")
+        .map((p) => p.data as string),
+    };
+    const addrs = pins
+      .map((p) => nip19.decode(p))
+      .filter((p) => p.type === "naddr")
+      .map((p) => p.data) as nip19.AddressPointer[];
+    const addrFilter: NDKFilter = {
+      authors: [...new Set(addrs.map((a) => a.pubkey))],
+      kinds: [...new Set(addrs.map((a) => a.kind))],
+      "#d": [...new Set(addrs.map((a) => a.identifier))],
+    };
+    const filters: NDKFilter[] = [];
+    if (idsFilter.ids!.length) filters.push(idsFilter);
+    if (addrFilter.authors!.length) filters.push(addrFilter);
+    if (!filters.length) return;
+
+    const relays = await this.getRelays();
+    const events = await fetchEvents(this.ndk, filters, relays, 3000);
+
+    const matching = [...events].filter((e) => this.matchObject(e));
+    console.log("store update pinned", matching);
+    await this.storeEvents(matching);
+    await this.parseEvents(matching);
+    await this.processBatch();
+  }
+
   private async fetchForContext(context: Context) {
     // now fetch route-specific stuff, if any
     let kinds: number[] = [];
@@ -264,11 +306,14 @@ export class NostrStore extends RamStore {
     const since = await this.loadFromDb(this.maxObjects * 10);
     // fetch since latest in db until now
     await this.fetchAllObjects(this.maxObjects, { since });
+
+    await this.fetchPins();
   }
 
   private async loadPreview() {
     // fetch the latest stuff from relays
     await this.fetchAllObjects(this.maxObjects, {});
+    await this.fetchPins();
   }
 
   private async getRelays() {
@@ -402,6 +447,7 @@ export class NostrStore extends RamStore {
 
   private async loadSsr() {
     await this.fetchAllObjects(this.maxObjects, {});
+    await this.fetchPins();
   }
 
   private async loadTab() {
@@ -430,6 +476,7 @@ export class NostrStore extends RamStore {
 
   private async processBatch() {
     await this.fetchContributors();
+    await this.fetchPinned();
     await this.assignAuthors();
     await this.postProcess();
 
@@ -449,8 +496,9 @@ export class NostrStore extends RamStore {
         break;
       case "ssr":
         // make deploy work properly
-        if (context.context.includes("home"))
+        if (context.context.includes("home")) {
           await this.fetchForContext(context);
+        }
         break;
     }
   }
@@ -676,6 +724,11 @@ export class NostrStore extends RamStore {
   private async postProcess() {
     // NOTE: must be idempotent
 
+    // mark featured
+    for (const p of this.posts) {
+      p.featured = this.pins.includes(p.id);
+    }
+
     // attach images to tags
     for (const tag of this.tags) {
       for (const post of this.posts.filter((p) =>
@@ -720,6 +773,46 @@ export class NostrStore extends RamStore {
       this.settings.admin_pubkey,
     ];
     await this.fetchProfiles(pubkeys);
+  }
+
+  private async fetchPinned() {
+    const pubkeys = this.settings.contributor_pubkeys.length
+      ? this.settings.contributor_pubkeys
+      : [this.settings.admin_pubkey];
+
+    const cachedEvents = this.useCache()
+      ? await dbi.listKindEvents(KIND_PINNED, 100)
+      : [];
+
+    const pins = cachedEvents
+      .filter((e) => pubkeys.includes(e.pubkey))
+      .map((e) => new NDKEvent(this.ndk, e));
+    console.log("cached pins", pins, pubkeys);
+
+    const nonCachedPubkeys = [
+      ...new Set(pubkeys.filter((p) => !pins.find((e) => e.pubkey === p))),
+    ];
+
+    if (nonCachedPubkeys.length > 0) {
+      const relays = [...this.settings.contributor_relays];
+      console.log("fetching pins", nonCachedPubkeys, relays);
+      const events = await fetchEvents(
+        this.ndk,
+        {
+          kinds: [KIND_PINNED],
+          authors: nonCachedPubkeys,
+        },
+        relays,
+        1000 // timeoutMs
+      );
+      console.log("fetched pins", { events, relays });
+      if (events) {
+        pins.push(...events);
+        await this.storeEvents([...events]);
+      }
+    }
+
+    this.parsePins(pins);
   }
 
   private async assignAuthors() {
@@ -923,13 +1016,21 @@ export class NostrStore extends RamStore {
       // await this.fetchNostrLinks([...events]);
     }
 
-    this.parseProfiles([...profiles]);
+    this.parseProfiles(profiles);
   }
 
   private parseProfiles(events: NDKEvent[]) {
     for (const e of events) {
       const p = this.parser.parseProfile(e);
       this.profiles.push(p);
+    }
+  }
+
+  private parsePins(events: NDKEvent[]) {
+    for (const e of events) {
+      const pins = this.parser.parsePins(e);
+      console.log("pins by", e.pubkey, pins);
+      this.pins.push(...pins);
     }
   }
 

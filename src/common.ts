@@ -550,7 +550,8 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
       div.style.cssText = cssText;
       // effects
       div.style.opacity = "1";
-      div.style.visibility = "visible";
+      // reset?
+      div.style.visibility = ""; // "visible";
       img.parentNode!.insertBefore(div, img);
       img.remove();
     }

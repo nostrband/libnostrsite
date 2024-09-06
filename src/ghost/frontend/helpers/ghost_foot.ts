@@ -82,6 +82,7 @@ export default function ghost_foot(options: any) {
     foot.push(`
   <script async src="${JS_NOSTR_LOGIN}"
     data-perms="sign_event:1,sign_event:9734"
+    data-start-screen="local-signup"
   ></script>
   <script>
     (async () => {

@@ -600,7 +600,7 @@ export class NostrParser {
     post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
     post.html = await marked.parse(post.markdown, {
-      breaks: true // convert \n to <br>
+      breaks: true, // convert \n to <br>
     });
 
     await this.embedLinks(store, post);
@@ -745,6 +745,25 @@ export class NostrParser {
       profile,
       event: e,
     };
+  }
+
+  public parsePins(e: NDKEvent): string[] {
+    try {
+      const ids = tags(e, "e").map((t) => nip19.noteEncode(t[1]));
+      const addrs = tags(e, "a")
+        .map((t) => t[1].split(":"))
+        .map((v) =>
+          nip19.naddrEncode({
+            identifier: v[2],
+            kind: parseInt(v[0]),
+            pubkey: v[1],
+          })
+        );
+      return [...ids, ...addrs];
+    } catch (err) {
+      console.log("bad pins list", e, err);
+      return [];
+    }
   }
 
   public async parseAuthor(profile: Profile, store?: Store): Promise<Author> {
