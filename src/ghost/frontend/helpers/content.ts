@@ -133,6 +133,7 @@ export default function content(options: any = {}) {
     `;
 
     html += `<zap-threads 
+  npubpro="true"
   mode="chat"
   anchor="${self.id}"
   relays="${relays.join(",")}"

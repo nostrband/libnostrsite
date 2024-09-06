@@ -87,9 +87,10 @@ export class DefaultRouter implements Router {
 
     // rss only on homepage, tag or author
     route.hasRss =
-      route.context.includes("home") ||
-      route.context.includes("tag") ||
-      route.context.includes("author");
+      !route.context.includes("paged") &&
+      (route.context.includes("home") ||
+        route.context.includes("tag") ||
+        route.context.includes("author"));
 
     if (isRss && route.hasRss) {
       route.context.push("rss");

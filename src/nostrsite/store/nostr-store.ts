@@ -52,6 +52,7 @@ export class NostrStore extends RamStore {
   private subs: NDKSubscription[] = [];
   private fetchedRelays?: boolean;
   private getUrlCb?: (o: StoreObject) => string;
+  private fetchContextDone = new Set<string>();
 
   constructor(
     mode: RenderMode = "iife",
@@ -214,6 +215,12 @@ export class NostrStore extends RamStore {
 
     console.log("fetchForRoute", context, { authors, kinds, hashtags });
 
+    const contextId =
+      kinds.join(",") + ":" + hashtags.join(",") + authors.join(",");
+
+    // already done?
+    if (this.fetchContextDone.has(contextId)) return;
+
     // if there are filters specific to the current page,
     // make sure we load them too
     if (kinds.length || hashtags.length || authors.length) {
@@ -239,7 +246,14 @@ export class NostrStore extends RamStore {
       filters.forEach((f) => (f.limit = limit * 5));
 
       // fetch, with small timeout
+      const wasPosts = this.posts.length;
       await this.fetchAllObjects(limit, { until, filters, timeout: 3000 });
+
+      // nothing loaded? mark as done
+      if (wasPosts === this.posts.length) {
+        console.log("done fetchForContext", contextId);
+        this.fetchContextDone.add(contextId);
+      }
     }
   }
 
