@@ -23,12 +23,7 @@ import {
   DEFAULT_PARTIALS_DIR_NAME,
 } from "./partials/default-partials";
 import merge from "lodash-es/merge";
-import {
-  Profile,
-  RenderOptions,
-  getUrlMediaMime,
-  profileId,
-} from ".";
+import { Profile, RenderOptions, getUrlMediaMime, profileId } from ".";
 import { templates } from "../ghost/frontend/services/theme-engine/handlebars/template";
 import { DateTime } from "luxon";
 
@@ -167,7 +162,9 @@ export class ThemeEngine {
       ...this.theme.custom,
     };
     for (const [k, v] of settings.custom.entries()) {
-      this.custom[k] = v;
+      const bool =
+        k in this.theme.custom && typeof this.theme.custom[k] === "boolean";
+      this.custom[k] = bool ? v === "true" : v;
     }
     console.log("custom", this.custom);
 
@@ -268,9 +265,7 @@ export class ThemeEngine {
     );
   }
 
-  public async render(
-    context: Context
-  ): Promise<string> {
+  public async render(context: Context): Promise<string> {
     const start = Date.now();
     console.log("render", context);
 
