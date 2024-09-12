@@ -79,10 +79,20 @@ export default function ghost_foot(options: any) {
   <script type="text/javascript" async src="${JS_CONTENT_CTA}"></script>
 `);
 
+    const relays = [
+      ...new Set([
+        ...site.contributor_inbox_relays,
+        ...site.contributor_relays,
+      ]),
+    ];
+    if (relays.length > 10) relays.length = 10;
+    console.log("nostr-login relays", relays, site);
+
     foot.push(`
   <script async src="${JS_NOSTR_LOGIN}"
     data-perms="sign_event:1,sign_event:9734"
     data-start-screen="local-signup"
+    data-signup-relays="${relays}"
   ></script>
   <script>
     (async () => {

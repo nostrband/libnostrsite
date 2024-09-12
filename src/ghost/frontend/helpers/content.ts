@@ -117,9 +117,7 @@ export default function content(options: any = {}) {
       data-cta-list="zap,open-with"
       data-cta-main="zap"
       data-button-color="${site.accent_color}"
-      data-text-button-color="${getContrastingTextColor(
-        site.accent_color
-      )}"
+      data-text-button-color="${getContrastingTextColor(site.accent_color)}"
     ></np-content-cta>
     <div
       style="display: none"
@@ -132,11 +130,17 @@ export default function content(options: any = {}) {
     ></div>
     `;
 
+    let client = "";
+    try {
+      client = new URL(site.url).hostname;
+    } catch {}
+
     html += `<zap-threads 
   npubpro="true"
   mode="chat"
   anchor="${self.id}"
   relays="${relays.join(",")}"
+  client="${client}"
   ></zap-threads>`;
   }
 

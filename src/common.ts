@@ -24,6 +24,8 @@ import {
   isAudioUrl,
   isImageUrl,
   isVideoUrl,
+  tv,
+  tvs,
 } from ".";
 import { toRGBString } from "./color";
 import { dbi } from "./nostrsite/store/db";
@@ -483,6 +485,8 @@ export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
       isAudioUrl,
       isImageUrl,
       getOembedUrl,
+      tv,
+      tvs,
       luxon,
     };
   if (!s.dbCache) {
@@ -546,7 +550,11 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
       }
       // ensure it's positioned, so that the position:absolute child
       // we created above could be placed properly
-      if (!cssText.includes("position:")) cssText += "; position: relative";
+      if (
+        !cssText.includes("position:") ||
+        styles.getPropertyValue("position") === "static"
+      )
+        cssText += "; position: relative";
       div.style.cssText = cssText;
       // effects
       div.style.opacity = "1";

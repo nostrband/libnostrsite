@@ -28,6 +28,7 @@
     "cheerio": "^1.0.0-rc.12",
     "dexie": "^4.0.7",
     "downsize-cjs": "^1.0.1",
+    "jsonpath": "^1.1.1",
     "lodash-es": "^4.17.21",
     "luxon": "^3.4.4",
     "marked": "^14.0.0",
@@ -40,6 +41,7 @@
     "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
+    "@types/jsonpath": "^0.2.4",
     "@types/lodash-es": "^4.17.12",
     "@types/luxon": "^3.4.2",
     "@types/path-browserify": "^1.0.2",

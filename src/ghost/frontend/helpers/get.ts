@@ -4,13 +4,14 @@
 
 // @ts-ignore
 import tpl from "@tryghost/tpl";
-//import { query } from "jsonpath";
+import { query } from "jsonpath";
 
 import { getRenderer } from "../services/renderer";
 //import isDate from "lodash-es/isDate";
 import isString from "lodash-es/isString";
 import omit from "lodash-es/omit";
 import { DEFAULT_MAX_LIMIT } from "../../../nostrsite/consts";
+import { isDate } from "lodash-es";
 
 const messages = {
   mustBeCalledAsBlock:
@@ -38,7 +39,7 @@ function resolvePaths(globals: any, data: any, value: string) {
   void data;
 
   value = value.replace(regex, function (__: any, path: string) {
-    let result = "";
+    let result;
 
     // Handle aliases
     path = pathAliases[path] ? pathAliases[path] : path;
@@ -51,22 +52,22 @@ function resolvePaths(globals: any, data: any, value: string) {
     // before we figure out if it should be enabled.
     // BTW jsonpath has last been updated 3 years ago, so it
     // should be avoided in any case.
-    return result;
-    // if (path.charAt(0) === "@") {
-    //   result = query(globals, path.slice(1));
-    // } else {
-    //   // Do the query, which always returns an array of matches
-    //   result = query(data, path);
-    // }
+    // return result;
+    if (path.charAt(0) === "@") {
+      result = query(globals, path.slice(1));
+    } else {
+      // Do the query, which always returns an array of matches
+      result = query(data, path);
+    }
 
     // Handle the case where the single data property we return is a Date
     // Data.toString() is not DB compatible, so use `toISOString()` instead
-    // if (isDate(result[0])) {
-    //   result[0] = result[0].toISOString();
-    // }
+    if (isDate(result[0])) {
+      result[0] = result[0].toISOString();
+    }
 
-    // // Concatenate the results with a comma, handles common case of multiple tag slugs
-    // return result.join(",");
+    // Concatenate the results with a comma, handles common case of multiple tag slugs
+    return result.join(",");
   });
 
   return value;

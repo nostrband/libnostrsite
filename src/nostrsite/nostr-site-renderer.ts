@@ -89,6 +89,11 @@ export class NostrSiteRenderer implements Renderer {
     return this.addr;
   }
 
+  public getSite(): Site {
+    if (!this.settings) throw new Error("No site");
+    return this.settings;
+  }
+
   public started() {
     return this.hasStarted;
   }
