@@ -305,6 +305,18 @@ export class ThemeEngine {
         .replace("UTC", "GMT");
     };
 
+    const escapeHTML = (str: string) => {
+      return str.replace(/[&<>'"]/g, (tag: string) => {
+        return {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "'": "&#39;",
+          '"': "&quot;",
+        }[tag]!;
+      });
+    };
+
     const getName = async (pubkey: string) => {
       const npub = profileId(pubkey);
       const profile = (await this.store.get(npub, "profiles")) as
@@ -332,7 +344,7 @@ export class ThemeEngine {
           this.settings!.description || ""
         }]]></description>
         <link>${htmlUrl}</link>
-        <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
+        <atom:link href="${escapeHTML(feedUrl)}" rel="self" type="application/rss+xml"/>
         <itunes:new-feed-url>${feedUrl}</itunes:new-feed-url>
         <itunes:author><![CDATA[${admin}]]></itunes:author>
         <itunes:subtitle><![CDATA[${
@@ -355,7 +367,7 @@ export class ThemeEngine {
     const image = this.settings!.logo || this.settings!.icon;
     if (image) {
       rss += `
-      <itunes:image href="${image}" />
+      <itunes:image href="${escapeHTML(image)}" />
       <image>
         <title><![CDATA[${this.settings!.title || ""}]]></title>
         <link>${htmlUrl}</link>
@@ -396,9 +408,9 @@ export class ThemeEngine {
       ${
         payload
           ? `
-        <media:content url="${payload}" medium="${medium}"/>
+        <media:content url="${escapeHTML(payload)}" medium="${medium}"/>
         <enclosure 
-          url="${payload}" length="0" 
+          url="${escapeHTML(payload)}" length="0" 
           type="${getUrlMediaMime(payload)}" 
         />`
           : ""
@@ -410,7 +422,7 @@ export class ThemeEngine {
       <itunes:author><![CDATA[${author}]]></itunes:author>
       <itunes:summary><![CDATA[${p.html || ""}]]></itunes:summary>
       ${
-        payload && medium === "image" ? `<itunes:image href="${payload}"/>` : ""
+        payload && medium === "image" ? `<itunes:image href="${escapeHTML(payload)}"/>` : ""
       }
       </item>
       `;
