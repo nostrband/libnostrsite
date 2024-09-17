@@ -136,8 +136,10 @@ export default function content(options: any = {}) {
     } catch {}
 
     html += `<zap-threads 
+  style="margin-top: 0"
   npubpro="true"
   mode="chat"
+  disable="likes,zaps"
   anchor="${self.id}"
   relays="${relays.join(",")}"
   client="${client}"
