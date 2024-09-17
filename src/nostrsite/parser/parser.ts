@@ -446,7 +446,7 @@ export class NostrParser {
     }
 
     // now format content w/o the feature_image
-    post.markdown = content;
+    post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
 
     // replace nostr npub/nprofile links in markdown
     // with rich "Username" links
@@ -600,8 +600,10 @@ export class NostrParser {
     post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
     post.html = await marked.parse(post.markdown, {
+      // FIXME doesn't work!
       breaks: true, // convert \n to <br>
     });
+    // console.log(`md '${post.markdown}' html '${post.html}'`);
 
     await this.embedLinks(store, post);
   }

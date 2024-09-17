@@ -55,7 +55,7 @@ export const JS_SEARCH =
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
 export const JS_CONTENT_CTA =
- "https://cdn.npubpro.com/content-cta.iife.1.0.3.js";
+ "https://cdn.npubpro.com/content-cta.iife.1.0.4.js";
 // export const JS_CONTENT_CTA =
 //   "/content-cta.js";
 
