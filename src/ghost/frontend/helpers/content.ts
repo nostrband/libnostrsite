@@ -98,6 +98,20 @@ export default function content(options: any = {}) {
   //   html = downsize(self.html, truncateOptions);
 
   html = `<np-content id="${self.id}">${html}</np-content>`;
+
+  // fix themes with non-existent margins on p tags which
+  // are created by the md-html conversion
+  const margin = 2;
+  html += `
+  <style>
+  np-content p { margin-bottom: ${margin}rem; }
+  np-content h1 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  np-content h2 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  np-content h3 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  np-content h4 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  np-content h5 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  np-content h6 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  </style>`;
   // console.log("content html", html);
 
   // some contributor relays to fetch their replies

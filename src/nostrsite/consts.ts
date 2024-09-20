@@ -47,7 +47,7 @@ export const JS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
 export const CSS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
-export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.5.7.js";
+export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.5.8.js";
 export const JS_NOSTR_LOGIN =
   "https://unpkg.com/nostr-login@1.6.5/dist/unpkg.js";
 export const JS_SEARCH =

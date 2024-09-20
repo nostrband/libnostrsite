@@ -108,10 +108,12 @@ export default function ghost_foot(options: any) {
         } else {
           window.__nlAuthed = false;
         }
+
+        const npub = window.nostrSite.nostrTools.nip19.npubEncode(await window.nostr.getPublicKey());
         const zapThreads = document.querySelector('zap-threads');
         if (zapThreads) {
           if (window.__nlAuthed)
-            zapThreads.setAttribute("user", window.nostrSite.nostrTools.nip19.npubEncode(await window.nostr.getPublicKey()));
+            zapThreads.setAttribute("user", npub);
           else
             zapThreads.setAttribute("user", "");
         }
@@ -121,6 +123,13 @@ export default function ghost_foot(options: any) {
             zapButton.setAttribute("data-anon", "");
           else
             zapButton.setAttribute("data-anon", "true");
+        }
+        const cta = document.querySelector('np-content-cta');
+        if (cta) {
+          if (window.__nlAuthed)
+            cta.setAttribute("data-user-npub", npub);
+          else
+            cta.setAttribute("data-user-npub", "");
         }
       });  
     })();
@@ -137,7 +146,11 @@ export default function ghost_foot(options: any) {
       console.log("nostr-zap ep", ep);
       ep.subscribe("action-zap", () => {
         document.querySelector("#zap-button").dispatchEvent(new Event("click"));
-      })
+      });
+      document.addEventListener("nostr-zap-published", (e) => {
+        console.log("nostr-zap on zap published", e);
+        ep.dispatch("event-published", e);
+      });
     })();
   </script>
     `);

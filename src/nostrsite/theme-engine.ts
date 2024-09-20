@@ -267,7 +267,7 @@ export class ThemeEngine {
 
   public async render(context: Context): Promise<string> {
     const start = Date.now();
-    console.log("render", context);
+    console.log("render", { ...context });
 
     let result = "";
     if (context.allowRss && context.context.includes("rss") && context.posts) {

@@ -93,7 +93,6 @@ export default function match(...attrs: any[]) {
 
     return attr;
   });
-  console.debug("match", { options, attrs });
   if (attrs.length === 1) {
     // CASE: single attribute, treat it as simple true/false (like the if helper)
     result = handleConditional(attrs[0], options);
@@ -107,6 +106,7 @@ export default function match(...attrs: any[]) {
     console.warn(tpl(messages.invalidAttribute));
     return;
   }
+  console.debug("match", { options, attrs, result });
 
   // @ts-ignore
   const self: any = this;

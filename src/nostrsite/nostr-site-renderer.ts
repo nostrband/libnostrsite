@@ -1,4 +1,4 @@
-import NDK, { NDKEvent, NDKFilter, NostrEvent } from "@nostr-dev-kit/ndk";
+import NDK, { NDKEvent, NDKFilter, NDKNip07Signer, NDKRelaySet, NostrEvent } from "@nostr-dev-kit/ndk";
 
 // @ts-ignore FIXME ADD TYPES
 import BrowserHbs from "browser-hbs";
@@ -34,6 +34,7 @@ import {
   ensureNumber,
   fetchEvent,
   fetchEvents,
+  fetchOutboxRelays,
   isBlossomUrl,
   isEqualContentSettings,
 } from "./utils";
@@ -824,5 +825,23 @@ export class NostrSiteRenderer implements Renderer {
     }
 
     return profiles;
+  }
+
+  public async publishEvent(event: NostrEvent, options?: { relays?: string[] }) {
+    const e = new NDKEvent(this.ndk!, event);
+    console.log("signing", event, e);
+    const sig = await e.sign(new NDKNip07Signer());
+    console.log("signed", e, sig);
+    const relays = this.prepareRelays({
+      relays: options ? options.relays : undefined,
+      outboxRelays: [0, 3, 10002].includes(event.kind!)
+    });
+    const r = await e.publish(NDKRelaySet.fromRelayUrls(relays, this.ndk!))
+    console.log("published", e, r);
+    return e.rawEvent();
+  }
+
+  public async fetchOutboxRelays(pubkeys: string[]) {
+    return fetchOutboxRelays(this.ndk!, pubkeys);
   }
 }

@@ -446,18 +446,11 @@ export class NostrParser {
     }
 
     // now format content w/o the feature_image
+    // NOTE: kind1 isn't MD so people will use line breaks to format
+    // their notes, this formatting is lost unless we manually
+    // convert \n to <br> so that MD parser doesn't collapse consecutive
+    // line breaks
     post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
-
-    // replace nostr npub/nprofile links in markdown
-    // with rich "Username" links
-    // if (store)
-    //   post.markdown = await this.replaceNostrProfiles(
-    //     store,
-    //     post.nostrLinks,
-    //     content
-    //   );
-
-    // post.markdown = await this.replaceNostrLinks(post, post.markdown);
 
     // now cut all links to create a title and excerpt
     let textContent = (await new Marked().use(markedPlaintify()).parse(content))
@@ -717,7 +710,7 @@ export class NostrParser {
         new RegExp(`(#${t.name})\\b`, "gi"),
       ];
       for (const rx of rxs) {
-        console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
+        // console.log("hashtag replace", t, rx, [...post.html!.matchAll(rx)]);
         post.html = post.html!.replace(rx, `<a href='${t.url}'>$&</a>`);
       }
     }
