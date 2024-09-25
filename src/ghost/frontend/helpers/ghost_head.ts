@@ -10,10 +10,7 @@
 import { getRenderer } from "../services/renderer";
 import findLastIndex from "lodash-es/findLastIndex";
 import includes from "lodash-es/includes";
-import {
-  CSS_VENOBOX,
-  JQUERY,
-} from "../../../nostrsite/consts";
+import { CSS_VENOBOX, JQUERY } from "../../../nostrsite/consts";
 import { nip19 } from "nostr-tools";
 import { PLAY_FEATURE_BUTTON_PREFIX } from "../../..";
 
@@ -383,10 +380,8 @@ export default async function ghost_head(options: any) {
 
     const pagination = root.pagination;
     const paginationUrl = (page: number) => {
-      if (page > 1)
-        return urlUtils.createUrl(`${root.pathBase}page/${page}`);
-      else
-        return root.pathBase;
+      if (page > 1) return urlUtils.createUrl(`${root.pathBase}page/${page}`);
+      else return root.pathBase;
     };
     if (pagination?.prev) {
       head.push(
@@ -436,6 +431,10 @@ export default async function ghost_head(options: any) {
       }
     </style>
     `);
+
+    // head.push(
+    //   `<link href="https://vjs.zencdn.net/8.16.1/video-js.css" rel="stylesheet" />`
+    // );
 
     if (context) {
       // head is our main array that holds our meta data

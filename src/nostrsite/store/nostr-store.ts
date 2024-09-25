@@ -11,6 +11,7 @@ import {
   BLACKLISTED_RELAYS,
   DEFAULT_MAX_LIMIT,
   KIND_LONG_NOTE,
+  KIND_MUSIC,
   KIND_NOTE,
   KIND_PINNED,
   KIND_PROFILE,
@@ -641,6 +642,7 @@ export class NostrStore extends RamStore {
         switch (e.kind) {
           case KIND_LONG_NOTE:
           case KIND_NOTE:
+          case KIND_MUSIC:
             return this.parser
               .parseNostrLinks(e.content)
               .map((l) => l.split("nostr:")[1]);
@@ -1108,6 +1110,7 @@ export class NostrStore extends RamStore {
       // filter invalid stuff
       kinds = kinds.filter((k) => SUPPORTED_KINDS.includes(k));
     }
+    // console.log("kinds", kinds, SUPPORTED_KINDS, this.settings.include_kinds);
 
     const addAll = (tag?: { tag: string; value: string }) => {
       for (const k of kinds!) add(k, tag);

@@ -1,11 +1,17 @@
-import { NDKEvent } from "@nostr-dev-kit/ndk";
+import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { Site } from "../types/site";
 import { eventId, profileId, tags, tv } from "./utils";
 import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { Marked, marked } from "marked";
 // import moment from "moment-timezone";
-import { KIND_LONG_NOTE, KIND_NOTE, KIND_PACKAGE, KIND_SITE } from "../consts";
+import {
+  KIND_LONG_NOTE,
+  KIND_MUSIC,
+  KIND_NOTE,
+  KIND_PACKAGE,
+  KIND_SITE,
+} from "../consts";
 import { Profile } from "../types/profile";
 import { Author } from "../types/author";
 import { Theme } from "../types/theme";
@@ -263,6 +269,8 @@ export class NostrParser {
         return await this.parseLongNote(e);
       case KIND_NOTE:
         return await this.parseNote(e, store);
+      case KIND_MUSIC:
+        return await this.parseMusic(e);
 
       default:
         console.warn("unsupported kind", e);
@@ -270,9 +278,7 @@ export class NostrParser {
     return undefined;
   }
 
-  public async parseLongNote(e: NDKEvent) {
-    if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
-
+  private preParseEvent(e: NDKEvent) {
     const id = eventId(e);
     //    const html = await marked.parse(e.content);
     const post: Post = {
@@ -287,92 +293,6 @@ export class NostrParser {
       html: null,
       comment_id: e.id,
       feature_image: tv(e, "image"),
-      feature_image_alt: null,
-      feature_image_caption: null,
-      featured: false,
-      visibility: "public",
-      created_at: fromUNIX(e.created_at),
-      updated_at: fromUNIX(e.created_at),
-      published_at: fromUNIX(
-        parseInt(tv(e, "published_at") || "" + e.created_at)
-      ),
-      custom_excerpt: null,
-      codeinjection_head: null,
-      codeinjection_foot: null,
-      custom_template: null,
-      canonical_url: null,
-      excerpt: tv(e, "summary"), //  || (await marked.parse(downsize(e.content, { words: 50 })))
-      reading_time: 0,
-      access: true,
-      og_image: null,
-      og_title: null,
-      og_description: null,
-      twitter_image: null,
-      twitter_title: null,
-      twitter_description: null,
-      meta_title: null,
-      meta_description: null,
-      email_subject: null,
-      primary_tag: null,
-      tags: [],
-      primary_author: null,
-      authors: [],
-      markdown: e.content || "",
-      images: [],
-      videos: [],
-      audios: [],
-      links: this.parseTextLinks(e.content),
-      nostrLinks: this.parseNostrLinks(e.content),
-      event: e.rawEvent(),
-      show_title_and_feature_image: true,
-    };
-
-    // if (store)
-    //   post.markdown = await this.replaceNostrProfiles(
-    //     store,
-    //     post.nostrLinks,
-    //     post.markdown!
-    //   );
-
-    // post.markdown = await this.replaceNostrLinks(post, post.markdown!);
-
-    // images from links
-    post.images = this.parseImages(post);
-    post.videos = this.parseVideos(post);
-
-    if (!post.feature_image && post.images.length)
-      post.feature_image = post.images[0];
-    if (!post.feature_image && post.videos.length)
-      post.feature_image = PLAY_FEATURE_BUTTON.replace(
-        "<video_url>",
-        encodeURIComponent(post.videos[0])
-      );
-
-    // replace media links and oembeds
-    // this.embedLinks(post);
-
-    // FIXME config?
-    post.og_description = post.links.find((u) => isVideoUrl(u)) || null;
-
-    return post;
-  }
-
-  public async parseNote(e: NDKEvent, store?: Store) {
-    if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
-
-    const id = eventId(e);
-    const post: Post = {
-      type: "post",
-      id,
-      noteId: nip19.noteEncode(e.id),
-      npub: nip19.npubEncode(e.pubkey),
-      slug: slugify(tv(e, "slug") || id),
-      uuid: e.id,
-      url: "",
-      title: "",
-      html: null,
-      comment_id: e.id,
-      feature_image: "",
       feature_image_alt: null,
       feature_image_caption: null,
       featured: false,
@@ -403,24 +323,22 @@ export class NostrParser {
       tags: [],
       primary_author: null,
       authors: [],
-      markdown: "",
+      markdown: e.content || "",
       images: [],
       videos: [],
       audios: [],
-      links: this.parseTextLinks(e.content),
+      links: this.parseLinks(e),
       nostrLinks: this.parseNostrLinks(e.content),
       event: e.rawEvent(),
       show_title_and_feature_image: true,
     };
 
-    // oembed from built-in providers
-    //    await this.fetchOembeds(post);
-
-    // parse media
+    // images from links
     post.images = this.parseImages(post);
     post.videos = this.parseVideos(post);
+    post.audios = this.parseAudios(post);
 
-    // set feature image
+    // init feature image
     if (!post.feature_image && post.images.length)
       post.feature_image = post.images[0];
     if (!post.feature_image && post.videos.length)
@@ -429,6 +347,29 @@ export class NostrParser {
         encodeURIComponent(post.videos[0])
       );
 
+    // init podcast media url
+    post.og_description = post.audios?.[0] || post.videos?.[0] || "";
+
+    return post;
+  }
+
+  public async parseLongNote(e: NDKEvent) {
+    if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
+
+    const post = this.preParseEvent(e);
+
+    // one custom field
+    post.excerpt = tv(e, "summary");
+
+    return post;
+  }
+
+  public async parseNote(e: NDKEvent, store?: Store) {
+    if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
+
+    const post = this.preParseEvent(e);
+
+    // setting
     const includeFeatureImageInPost =
       this.getConf("include_feature_image") === "true";
 
@@ -491,24 +432,18 @@ export class NostrParser {
     if (!post.title || post.title !== headline) post.title += "…";
     if (post.excerpt && post.excerpt !== textContent) post.excerpt += "…";
 
-    // short content (title === content) => empty title?
-    // if (content.trim() === post.title?.trim()) post.title = null;
-
-    // podcasts
-    // if (this.getConf("podcast_media_in_og_description") === "true") {
-    post.og_description =
-      post.links.find((u) => isVideoUrl(u) || isAudioUrl(u)) || null;
-    // }
-
     return post;
   }
 
-  // private replaceLinks(links: string[], s: string): string {
-  //   for (const l of links) {
-  //     s = s.replace(l, `[${l}](${l})`)
-  //   }
-  //   return s;
-  // }
+  public async parseMusic(e: NDKEvent) {
+    if (e.kind !== KIND_MUSIC) throw new Error("Bad kind: " + e.kind);
+
+    const post = this.preParseEvent(e);
+
+    // post.excerpt = tv(e, "summary");
+
+    return post;
+  }
 
   private async replaceNostrProfiles(
     store: Store,
@@ -820,26 +755,38 @@ export class NostrParser {
     return author;
   }
 
-  private parseMarkdownImages(markdown: string | undefined): string[] {
-    if (!markdown) return [];
+  // private parseMarkdownImages(markdown: string | undefined): string[] {
+  //   if (!markdown) return [];
 
-    const IMAGE_MD_RX = /!\[(.*)\]\((.+)\)/g;
-    return [
-      ...new Set(
-        [...markdown.matchAll(IMAGE_MD_RX)]
-          .filter((m) => m?.[2])
-          .map((m) => m[2])
-      ),
-    ];
-  }
+  //   const IMAGE_MD_RX = /!\[(.*)\]\((.+)\)/g;
+  //   return [
+  //     ...new Set(
+  //       [...markdown.matchAll(IMAGE_MD_RX)]
+  //         .filter((m) => m?.[2])
+  //         .map((m) => m[2])
+  //     ),
+  //   ];
+  // }
 
-  private parseTextLinks(text: string): string[] {
-    if (!text) return [];
-    const RX =
-      /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%\?=~_’|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi;
-    // the one below doesn't cut the trailing dot "."
-    //      /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
-    return [...new Set([...text.matchAll(RX)].map((m) => m[0]))];
+  private parseLinks(e: NDKEvent | NostrEvent): string[] {
+    const links: string[] = [];
+    if (e.content) {
+      const RX =
+        /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%\?=~_’|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi;
+      // the one below doesn't cut the trailing dot "."
+      //      /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
+      links.push(...[...e.content.matchAll(RX)].map((m) => m[0]));
+    }
+
+    const tagUrls: string[] = e.tags
+      .filter((t) => t.length > 1 && t[0] === "imeta")
+      .map((t) => t.find((v) => v.startsWith("url ")))
+      .filter((u) => !!u)
+      .map((u) => u?.split("url ")[1].trim() as string)
+      .filter((u) => !!u);
+    links.push(...tagUrls);
+
+    return [...new Set(links)];
   }
 
   public parseNostrLinks(text: string): string[] {
@@ -852,17 +799,9 @@ export class NostrParser {
     const images: string[] = [];
     if (post.feature_image) images.push(post.feature_image);
 
-    // collect images from markdown
-    images.push(...this.parseMarkdownImages(post.markdown));
-
     // extract from string content
-    const urls = this.parseTextLinks(post.event.content);
+    const urls = this.parseLinks(post.event);
     images.push(...urls.filter((u) => isImageUrl(u)));
-
-    // for (const l of post.links) {
-    //   const oe = this.oembeds.get(l);
-    //   if (oe && oe.thumbnail_url) images.push(oe.thumbnail_url);
-    // }
 
     // unique
     return [...new Set(images)];
@@ -872,10 +811,21 @@ export class NostrParser {
     const videos: string[] = [];
 
     // extract from string content
-    const urls = this.parseTextLinks(post.event.content);
+    const urls = this.parseLinks(post.event);
     videos.push(...urls.filter((u) => isVideoUrl(u)));
 
     // unique
     return [...new Set(videos)];
+  }
+
+  private parseAudios(post: Post): string[] {
+    const audios: string[] = [];
+
+    // extract from string content
+    const urls = this.parseLinks(post.event);
+    audios.push(...urls.filter((u) => isAudioUrl(u)));
+
+    // unique
+    return [...new Set(audios)];
   }
 }

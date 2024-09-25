@@ -74,6 +74,8 @@ export function isAudioUrl(u: string) {
       case "ogg":
       case "wav":
       case "weba":
+      case "m3u":
+      case "m3u8":
         return true;
     }
   } catch {}

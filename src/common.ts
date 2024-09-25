@@ -300,12 +300,12 @@ export async function prepareSiteByContent(
     // navigation
     site.tags.push([
       "nav",
-      `/tag/${t}`,
+      `/tag/${t.toLocaleLowerCase()}/`,
       t.charAt(0).toUpperCase() + t.slice(1),
     ]);
 
     // site hashtags for discovery
-    site.tags.push(["t", t]);
+    site.tags.push(["t", t.toLocaleLowerCase()]);
   }
 }
 
@@ -510,6 +510,13 @@ export function prepareGlobalNostrSite(tmpl: GlobalNostrSite) {
 
 export function startReplacingFeatureImagesWithVideoPreviews() {
   try {
+    // for (const a of document.querySelectorAll("audio")) {
+    //   a.classList.add("video-js");
+    // }
+    // for (const a of document.querySelectorAll("video")) {
+    //   a.classList.add("video-js");
+    // }
+
     const images = document.querySelectorAll("img");
     for (const img of images) {
       const src = img.getAttribute("src");

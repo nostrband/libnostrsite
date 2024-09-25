@@ -128,7 +128,7 @@ export default function content(options: any = {}) {
   if (site.config.get("no_default_plugins") !== "true") {
     // FIXME replace w/ HBS template to avoid code injection
     html += `<np-content-cta
-      data-cta-list="zap,open-with"
+      data-cta-list=""
       data-cta-main="zap"
       data-button-color="${site.accent_color}"
       data-text-button-color="${getContrastingTextColor(site.accent_color)}"

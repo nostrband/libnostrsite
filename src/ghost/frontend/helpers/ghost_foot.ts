@@ -167,6 +167,11 @@ export default function ghost_foot(options: any) {
     foot.push(`
   <script async src="${JS_EMBEDS}"></script>
     `);
+
+  //   foot.push(`
+  // <script src="https://vjs.zencdn.net/8.16.1/video.min.js"></script>
+  //   `);
+
   }
 
   foot.push(getPwaCode(renderOptions));

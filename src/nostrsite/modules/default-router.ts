@@ -71,6 +71,8 @@ export class DefaultRouter implements Router {
         route.context.push("paged");
         route.param2 = param(`tag/${route.param}/page`);
       }
+      // ensure it's case-insensitive
+      route.param = route.param!.toLowerCase();
     } else if (match("/author/*")) {
       // author for page 1, author+paged for others
       route.context = ["author"];

@@ -3,6 +3,7 @@ import {
   DEFAULT_PARTIALS,
   DEFAULT_PARTIALS_DIR_NAME,
 } from "../partials/default-partials";
+import { DEFAULT_TEMPLATES } from "../templates/default-templates";
 import { AssetFetcher } from "../types/asset-fetcher";
 import { Theme } from "../types/theme";
 
@@ -53,27 +54,24 @@ export class DefaultAssetFetcher implements AssetFetcher {
       if (theme.local) return file;
 
       const entry = theme.entries.find((e) => e.path === path);
-      if (!entry) {
-        console.error("Not found", file, path, theme.entries);
-        throw new Error("Not found " + file);
-      }
+      if (entry) return entry.url;
 
-      // const name = entry.url.split("/").pop()!;
-      // const ext = path.split(".").pop();
-      // console.log("asset ext", entry.url, name, ext);
+      if (path in DEFAULT_TEMPLATES) return path;
 
-      // return as is if it has extension
-      // if (!ext || name.includes(".")) {
-      return entry.url;
-      // }
-
-      // return `${entry.url}.${ext}`;
+      console.error("Not found", file, path, theme.entries);
+      throw new Error("Not found " + file);
     }
 
     return file;
   }
 
   private async fetchCachedExt(url: string) {
+    if (!url.includes("/")) {
+      // default templates
+      console.log("default template", url);
+      return DEFAULT_TEMPLATES[url];
+    }
+
     if (this.onCache) {
       const r = await this.onCache(url);
       if (r !== undefined) {
@@ -125,12 +123,6 @@ export class DefaultAssetFetcher implements AssetFetcher {
 
     // fetch then put to cache then return
     return this.fetchCachedExt(url);
-    // return fetch(url)
-    //   .then((d) => d.text())
-    //   .then((r) => {
-    //     this.cache.set(url, r);
-    //     return r;
-    //   });
   }
 
   public async fetch(file: string) {

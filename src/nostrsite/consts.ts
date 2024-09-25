@@ -7,7 +7,8 @@ export const KIND_THEME = 30514;
 export const KIND_PACKAGE = 1036;
 export const KIND_NOTE = 1;
 export const KIND_LONG_NOTE = 30023;
-export const SUPPORTED_KINDS = [KIND_NOTE, KIND_LONG_NOTE];
+export const KIND_MUSIC = 31337;
+export const SUPPORTED_KINDS = [KIND_NOTE, KIND_LONG_NOTE, KIND_MUSIC];
 export const JQUERY = "https://code.jquery.com/jquery-3.5.1.min.js";
 export const DEFAULT_MAX_LIMIT = 20;
 
@@ -55,7 +56,7 @@ export const JS_SEARCH =
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
 export const JS_CONTENT_CTA =
- "https://cdn.npubpro.com/content-cta.iife.1.0.4.js";
+ "https://cdn.npubpro.com/content-cta.iife.1.0.6.js";
 // export const JS_CONTENT_CTA =
 //   "/content-cta.js";
 
