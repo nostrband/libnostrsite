@@ -5,13 +5,7 @@ import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { Marked, marked } from "marked";
 // import moment from "moment-timezone";
-import {
-  KIND_LONG_NOTE,
-  KIND_MUSIC,
-  KIND_NOTE,
-  KIND_PACKAGE,
-  KIND_SITE,
-} from "../consts";
+import { KIND_NOTE, KIND_PACKAGE, KIND_SITE } from "../consts";
 import { Profile } from "../types/profile";
 import { Author } from "../types/author";
 import { Theme } from "../types/theme";
@@ -24,6 +18,7 @@ import { load as loadHtml } from "cheerio";
 import { dbi } from "../store/db";
 import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
 import markedPlaintify from "marked-plaintify";
+import { decodeGeoHash } from "../geohash";
 
 const NJUMP_DOMAIN = "njump.me";
 
@@ -155,6 +150,7 @@ export class NostrParser {
 
       config: new Map(),
       custom: new Map(),
+      pluginSettings: new Map(),
     };
 
     // admin is the only contributor?
@@ -172,12 +168,27 @@ export class NostrParser {
     if (settings.include_relays && settings.include_relays.length > 0)
       settings.contributor_relays = settings.include_relays;
 
+    // DEPRECATED, still reading from there for bw-compat
     for (const c of tags(event, "config", 3)) {
       settings.config.set(c[1], c[2]);
     }
 
+    // DEPRECATED, still reading from there for bw-compat
     for (const c of tags(event, "custom", 3)) {
       settings.custom.set(c[1], c[2]);
+    }
+
+    // new way
+    for (const c of tags(event, "settings", 4)) {
+      if (c[1] === "core") {
+        settings.config.set(c[2], c[3]);
+      } else if (c[1] === "theme") {
+        settings.custom.set(c[2], c[3]);
+      } else {
+        const ps = settings.pluginSettings.get(c[1]) || new Map();
+        ps.set(c[2], c?.[3] || "");
+        settings.pluginSettings.set(c[1], ps);
+      }
     }
 
     if (!settings.url!.endsWith("/")) settings.url += "/";
@@ -265,20 +276,22 @@ export class NostrParser {
 
   public async parseEvent(e: NDKEvent, store?: Store) {
     switch (e.kind) {
-      case KIND_LONG_NOTE:
-        return await this.parseLongNote(e);
       case KIND_NOTE:
         return await this.parseNote(e, store);
-      case KIND_MUSIC:
-        return await this.parseMusic(e);
-
       default:
-        console.warn("unsupported kind", e);
+        return await this.parseEventDefault(e);
+      // case KIND_MUSIC:
+      //   return await this.parseMusic(e);
+      // case KIND_LIVE_EVENT:
+      //   return await this.parseLiveEvent(e);
+
+      // default:
+      //   console.warn("unsupported kind", e);
     }
     return undefined;
   }
 
-  private preParseEvent(e: NDKEvent) {
+  private parseEventDefault(e: NDKEvent) {
     const id = eventId(e);
     //    const html = await marked.parse(e.content);
     const post: Post = {
@@ -307,7 +320,7 @@ export class NostrParser {
       codeinjection_foot: null,
       custom_template: null,
       canonical_url: null,
-      excerpt: null,
+      excerpt: tv(e, "summary") || tv(e, "description") || tv(e, "alt"),
       reading_time: 0,
       access: true,
       og_image: null,
@@ -333,6 +346,18 @@ export class NostrParser {
       show_title_and_feature_image: true,
     };
 
+    const geohash = tags(e, "g")
+      .filter((t) => t.length >= 2)
+      .map((t) => t[1])
+      .reduce((p, c) => (c.length > p.length ? c : p), "");
+    if (geohash) {
+      try {
+        post.geo = decodeGeoHash(geohash);
+      } catch (err) {
+        console.warn("Failed to parse geohash", geohash, err, e);
+      }
+    }
+
     // images from links
     post.images = this.parseImages(post);
     post.videos = this.parseVideos(post);
@@ -353,21 +378,18 @@ export class NostrParser {
     return post;
   }
 
-  public async parseLongNote(e: NDKEvent) {
-    if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
+  // public async parseLongNote(e: NDKEvent) {
+  //   if (e.kind !== KIND_LONG_NOTE) throw new Error("Bad kind: " + e.kind);
 
-    const post = this.preParseEvent(e);
+  //   const post = this.parseEventDefault(e);
 
-    // one custom field
-    post.excerpt = tv(e, "summary");
-
-    return post;
-  }
+  //   return post;
+  // }
 
   public async parseNote(e: NDKEvent, store?: Store) {
     if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
 
-    const post = this.preParseEvent(e);
+    const post = this.parseEventDefault(e);
 
     // setting
     const includeFeatureImageInPost =
@@ -435,15 +457,21 @@ export class NostrParser {
     return post;
   }
 
-  public async parseMusic(e: NDKEvent) {
-    if (e.kind !== KIND_MUSIC) throw new Error("Bad kind: " + e.kind);
+  // public async parseMusic(e: NDKEvent) {
+  //   if (e.kind !== KIND_MUSIC) throw new Error("Bad kind: " + e.kind);
 
-    const post = this.preParseEvent(e);
+  //   const post = this.parseEventDefault(e);
 
-    // post.excerpt = tv(e, "summary");
+  //   return post;
+  // }
 
-    return post;
-  }
+  // public async parseLiveEvent(e: NDKEvent) {
+  //   if (e.kind !== KIND_LIVE_EVENT) throw new Error("Bad kind: " + e.kind);
+
+  //   const post = this.parseEventDefault(e);
+
+  //   return post;
+  // }
 
   private async replaceNostrProfiles(
     store: Store,

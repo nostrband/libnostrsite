@@ -10,7 +10,7 @@
 import { getRenderer } from "../services/renderer";
 import findLastIndex from "lodash-es/findLastIndex";
 import includes from "lodash-es/includes";
-import { CSS_VENOBOX, JQUERY } from "../../../nostrsite/consts";
+import { CSS_MAPTALKS, CSS_VENOBOX, JQUERY } from "../../../nostrsite/consts";
 import { nip19 } from "nostr-tools";
 import { PLAY_FEATURE_BUTTON_PREFIX } from "../../..";
 
@@ -430,6 +430,10 @@ export default async function ghost_head(options: any) {
         content: '';
       }
     </style>
+    `);
+
+    head.push(`
+      <link rel="stylesheet" href="${CSS_MAPTALKS}">
     `);
 
     // head.push(

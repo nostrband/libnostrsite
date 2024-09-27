@@ -64,6 +64,8 @@ export interface Post {
   // ghost's settings, default=true
   show_title_and_feature_image: boolean;
 
+  geo?: { latitude: number[], longitude: number[] };
+
   // source nostr event
   event: NostrEvent
 }

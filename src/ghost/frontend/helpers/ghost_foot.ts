@@ -8,6 +8,7 @@ import {
   CSS_VENOBOX,
   JS_CONTENT_CTA,
   JS_EMBEDS,
+  JS_MAPTALKS,
   JS_NOSTR_LOGIN,
   JS_SEARCH,
   JS_VENOBOX,
@@ -166,12 +167,63 @@ export default function ghost_foot(options: any) {
 
     foot.push(`
   <script async src="${JS_EMBEDS}"></script>
+
     `);
 
-  //   foot.push(`
-  // <script src="https://vjs.zencdn.net/8.16.1/video.min.js"></script>
-  //   `);
+    // FIXME turn into a separate plugin that will
+    // load other posts and show them on the map
+    foot.push(`
+  <script type="text/javascript" src="${JS_MAPTALKS}"></script>
+  <div id="map" style='width: 100%; height: 50%; min-height: 300px'></div>
+  <script>
+    const container = document.querySelector("np-map");
+    console.log("map", container);
+    if (container) {
+      const coords = container.getAttribute("coords").split(',').map(c => Number(c));
+      console.log("coords", coords);
+      const div = document.createElement("div");
+      div.style.width="100%";
+      div.style.height="300px";
+      container.append(div);
+      const map = new maptalks.Map(div, {
+        center: coords,
+        zoom: 15,
+        zoomControl : true, // add zoom control
+        scaleControl : true, // add scale control
+        baseLayer: new maptalks.TileLayer('base', {
+//          urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          subdomains: ["a","b","c"], // "d"
+          attribution: '&copy; <a href="http://osm.org">OpenStreetMap</a>'
+        })
+      });
 
+      const point = new maptalks.Marker(
+        coords,
+        {
+          visible : true,
+          editable : false,
+          cursor : 'pointer',
+          draggable : false,
+          // symbol : {
+          //   'textFaceName' : 'sans-serif',
+          //   'textName' : 'MapTalks',
+          //   'textFill' : '#34495e',
+          //   'textHorizontalAlignment' : 'right',
+          //   'textSize' : 40
+          // }
+        }
+      );
+      point.on('click touchend', (e) => console.log(e));
+
+      new maptalks.VectorLayer('vector', point).addTo(map);
+    }
+  </script>
+    `);
+
+    //   foot.push(`
+    // <script src="https://vjs.zencdn.net/8.16.1/video.min.js"></script>
+    //   `);
   }
 
   foot.push(getPwaCode(renderOptions));

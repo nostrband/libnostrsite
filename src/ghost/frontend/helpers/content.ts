@@ -97,7 +97,14 @@ export default function content(options: any = {}) {
   // if (runTruncate)
   //   html = downsize(self.html, truncateOptions);
 
-  html = `<np-content id="${self.id}">${html}</np-content>`;
+  html = `<np-content event="${self.id}">${html}</np-content>`;
+
+  if (self.geo) {
+    html += `<np-map
+      event="${self.id}"
+      coords="${self.geo.longitude[2]},${self.geo.latitude[2]}"
+    ></np-map>`;
+  }
 
   // fix themes with non-existent margins on p tags which
   // are created by the md-html conversion
@@ -105,12 +112,12 @@ export default function content(options: any = {}) {
   html += `
   <style>
   np-content p { margin-bottom: ${margin}rem; }
-  np-content h1 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
-  np-content h2 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
-  np-content h3 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
-  np-content h4 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
-  np-content h5 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
-  np-content h6 { margin-top: ${2*margin}rem; margin-bottom: ${margin}rem; }
+  np-content h1 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
+  np-content h2 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
+  np-content h3 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
+  np-content h4 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
+  np-content h5 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
+  np-content h6 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
   </style>`;
   // console.log("content html", html);
 

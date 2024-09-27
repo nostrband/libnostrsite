@@ -75,5 +75,6 @@ export interface Site {
 
   config: Map<string, string>;
   custom: Map<string, string>;
+  pluginSettings: Map<string, Map<string, string>>;
 }
 
