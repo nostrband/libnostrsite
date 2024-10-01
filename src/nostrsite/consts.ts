@@ -2,6 +2,7 @@ export const KIND_PROFILE = 0;
 export const KIND_CONTACTS = 3;
 export const KIND_RELAYS = 10002;
 export const KIND_PINNED = 10001;
+export const KIND_PINNED_LONG_NOTES = 10023;
 export const KIND_SITE = 30512;
 export const KIND_THEME = 30514;
 export const KIND_PACKAGE = 1036;

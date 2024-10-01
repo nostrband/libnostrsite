@@ -1,6 +1,7 @@
 import { setHtml } from "./html";
-import { nip19 } from "nostr-tools";
+import { matchFilter, nip19 } from "nostr-tools";
 import {
+  KIND_NOTE,
   KIND_PROFILE,
   KIND_SITE,
   OUTBOX_RELAYS,
@@ -30,7 +31,7 @@ import {
   tvs,
 } from ".";
 import { toRGBString } from "./color";
-import { dbi } from "./nostrsite/store/db";
+import { DbEvent, dbi } from "./nostrsite/store/db";
 import { load as loadHtml } from "cheerio";
 import { getOembedUrl } from "./nostrsite/parser/oembed-providers";
 import * as luxon from "luxon";
@@ -907,4 +908,20 @@ export function createSiteFilters({
   }
 
   return filters;
+}
+
+export function matchPostsToFilters(
+  e: DbEvent | NostrEvent | NDKEvent,
+  filters: NDKFilter[]
+) {
+  if (e.kind === KIND_PROFILE) return false;
+  if (e.kind === KIND_NOTE) {
+    if (e.tags.find((t) => t.length >= 4 && t[0] === "e" && t[3] === "root")) {
+      // console.log("skip reply event", e.id, e.pubkey);
+      return false;
+    }
+  }
+
+  // @ts-ignore
+  return !!filters.find((f) => matchFilter(f, e));
 }

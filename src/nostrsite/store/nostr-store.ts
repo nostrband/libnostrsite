@@ -1,6 +1,7 @@
 import NDK, {
   NDKEvent,
   NDKFilter,
+  NDKKind,
   NDKRelaySet,
   NDKSubscription,
   NostrEvent,
@@ -14,6 +15,7 @@ import {
   KIND_MUSIC,
   KIND_NOTE,
   KIND_PINNED,
+  KIND_PINNED_LONG_NOTES,
   KIND_PROFILE,
   MAX_OBJECTS_IIFE,
   MAX_OBJECTS_PREVIEW,
@@ -28,7 +30,7 @@ import { Tag } from "../types/tag";
 // import { recommendations } from "./sample-recommendations";
 import { Post } from "../types/post";
 import { StoreObject } from "../types/store";
-import { matchFilter, nip19 } from "nostr-tools";
+import { nip19 } from "nostr-tools";
 import { slugify } from "../../ghost/helpers/slugify";
 import { DbEvent, dbi } from "./db";
 import {
@@ -42,7 +44,7 @@ import {
   profileId,
   tags,
 } from "..";
-import { createSiteFilters, scanRelays } from "../..";
+import { createSiteFilters, matchPostsToFilters, scanRelays } from "../..";
 
 export class NostrStore extends RamStore {
   private mode: RenderMode;
@@ -79,18 +81,7 @@ export class NostrStore extends RamStore {
   }
 
   public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
-    if (e.kind === KIND_PROFILE) return false;
-    if (e.kind === KIND_NOTE) {
-      if (
-        e.tags.find((t) => t.length >= 4 && t[0] === "e" && t[3] === "root")
-      ) {
-        // console.log("skip reply event", e.id, e.pubkey);
-        return false;
-      }
-    }
-
-    // @ts-ignore
-    return !!this.filters.find((f) => matchFilter(f, e));
+    return matchPostsToFilters(e, this.filters);
   }
 
   private async loadFromDb(limit: number) {
@@ -801,7 +792,7 @@ export class NostrStore extends RamStore {
       const events = await fetchEvents(
         this.ndk,
         {
-          kinds: [KIND_PINNED],
+          kinds: [KIND_PINNED, KIND_PINNED_LONG_NOTES] as NDKKind[],
           authors: nonCachedPubkeys,
         },
         relays,
