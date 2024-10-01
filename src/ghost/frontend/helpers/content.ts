@@ -111,6 +111,7 @@ export default function content(options: any = {}) {
   const margin = 2;
   html += `
   <style>
+  np-map { margin: 0.5rem 0 }
   np-content p { margin-bottom: ${margin}rem; }
   np-content h1 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
   np-content h2 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
@@ -135,8 +136,8 @@ export default function content(options: any = {}) {
   if (site.config.get("no_default_plugins") !== "true") {
     // FIXME replace w/ HBS template to avoid code injection
     html += `<np-content-cta
-      data-cta-list=""
-      data-cta-main="zap"
+      data-cta-list="${site.config.get("content_cta_list") || ""}"
+      data-cta-main="${site.config.get("content_cta_main") || "zap"}"
       data-button-color="${site.accent_color}"
       data-text-button-color="${getContrastingTextColor(site.accent_color)}"
     ></np-content-cta>

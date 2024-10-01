@@ -405,7 +405,7 @@ export class NostrSiteRenderer implements Renderer {
   private getPageLimit(contexts: string[]) {
     return contexts.includes("rss")
       ? POSTS_PER_RSS
-      : ensureNumber(this.config.posts_per_page) || DEFAULT_POSTS_PER_PAGE;
+      : ensureNumber(this.settings!.config.get("posts_per_page")) || DEFAULT_POSTS_PER_PAGE;
   }
 
   private async loadContextData(route: Route): Promise<Context> {

@@ -42,7 +42,7 @@ import {
   profileId,
   tags,
 } from "..";
-import { scanRelays } from "../..";
+import { createSiteFilters, scanRelays } from "../..";
 
 export class NostrStore extends RamStore {
   private mode: RenderMode;
@@ -1054,84 +1054,15 @@ export class NostrStore extends RamStore {
     // to fit into the default timeout per batch
     const limit = Math.min(this.maxObjects * 2, 300);
 
-    // all pubkeys by default
-    authors = authors || this.settings.contributor_pubkeys;
-
-    const filters: NDKFilter[] = [];
-    const add = (kind: number, tag?: { tag: string; value: string }) => {
-      const tagKey = "#" + tag?.tag;
-      // reuse filters w/ same tag
-      let f: NDKFilter | undefined = filters.find((f) => {
-        // if (!f.kinds?.includes(kind)) return false;
-        if (!tag) return !Object.keys(f).find((k) => k.startsWith("#"));
-        else return tagKey in f;
-      });
-
-      if (!f) {
-        // first filter for this tag
-        f = {
-          authors,
-          kinds: [kind],
-          limit,
-        };
-        if (tag) {
-          // @ts-ignore
-          f[tagKey] = [tag.value];
-        }
-        if (since) {
-          f.since = since;
-        }
-        if (until) {
-          f.until = until;
-        }
-
-        // append new filter
-        filters.push(f);
-      } else {
-        // append tag and kind
-        if (tag) {
-          // @ts-ignore
-          if (!f[tagKey].includes(tag.value)) {
-            // @ts-ignore
-            f[tagKey].push(tag.value);
-          }
-        }
-        if (!f.kinds!.includes(kind)) f.kinds!.push(kind);
-      }
-    };
-
-    if (!kinds) {
-      kinds = SUPPORTED_KINDS;
-      if (this.settings.include_kinds?.length)
-        kinds = this.settings.include_kinds
-          .map((k) => parseInt(k))
-          .filter((k) => SUPPORTED_KINDS.includes(k));
-    } else {
-      // filter invalid stuff
-      kinds = kinds.filter((k) => SUPPORTED_KINDS.includes(k));
-    }
-    // console.log("kinds", kinds, SUPPORTED_KINDS, this.settings.include_kinds);
-
-    const addAll = (tag?: { tag: string; value: string }) => {
-      for (const k of kinds!) add(k, tag);
-    };
-
-    if (hashtags) {
-      for (const t of hashtags) addAll({ tag: "t", value: t });
-    } else if (this.settings.include_all) {
-      addAll();
-    } else if (this.settings.include_tags?.length) {
-      for (const tag of this.settings.include_tags) {
-        if (tag.tag.length !== 1 || tag.tag < "a" || tag.tag > "z") {
-          console.log("Invalid include tag", tag);
-          continue;
-        }
-
-        addAll(tag);
-      }
-    }
-
-    return filters;
+    return createSiteFilters({
+      since,
+      until,
+      authors,
+      kinds,
+      hashtags,
+      limit,
+      settings: this.settings,
+    });
   }
 
   private isOffline() {
