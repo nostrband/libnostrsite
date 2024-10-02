@@ -55,10 +55,10 @@ export const JS_NOSTR_LOGIN =
   "https://unpkg.com/nostr-login@1.6.5/dist/unpkg.js";
 export const JS_SEARCH =
   "https://unpkg.com/nostr-site-search@1.0.12/dist/index.js";
-export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.0.js";
+export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.2.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
 export const JS_CONTENT_CTA =
- "https://cdn.npubpro.com/content-cta.iife.1.0.11.js";
+ "https://cdn.npubpro.com/content-cta.iife.1.0.13.js";
 export const JS_MAPTALKS = "https://cdn.npubpro.com/maptalks.min.js";
 export const CSS_MAPTALKS = "https://cdn.npubpro.com/maptalks.css";
 // export const JS_CONTENT_CTA =

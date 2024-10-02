@@ -145,12 +145,14 @@ export default function ghost_foot(options: any) {
         await new Promise((ok) => document.addEventListener('npLoad', ok));
       const ep = window.nostrSite.plugins.register("nostr-zap");
       console.log("nostr-zap ep", ep);
-      ep.subscribe("action-zap", () => {
-        document.querySelector("#zap-button").dispatchEvent(new Event("click"));
+      ep.subscribe("action-zap", (amount) => {
+        const button = document.querySelector("#zap-button");
+        button.setAttribute("data-amount", amount || "");
+        button.dispatchEvent(new Event("click"));
       });
       document.addEventListener("nostr-zap-published", (e) => {
         console.log("nostr-zap on zap published", e);
-        ep.dispatch("event-published", e);
+        ep.dispatch("event-published", e.detail);
       });
     })();
   </script>

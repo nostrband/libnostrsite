@@ -343,8 +343,10 @@ export default async function ghost_head(options: any) {
         object.primary_author?.name || object.primary_author?.id || "";
       if (author) head.push(`<meta name="author" content="${author}" />`);
       head.push(`<meta name="nostr:author" content="${npub}" />`);
-      if (object.type !== "tag")
+      if (object.type !== "tag") {
         head.push(`<meta name="nostr:id" content="${object.id}" />`);
+        head.push(`<meta name="nostr:event_id" content="${object.noteId}" />`);
+      }
     }
 
     // manifest
