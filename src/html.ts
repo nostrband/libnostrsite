@@ -57,9 +57,10 @@ async function executeScriptElements(doc: Document) {
       // async can execute at any time, no need to wait
       let promise = undefined;
       if (src && !async)
-        promise = new Promise((ok) =>
-          clonedElement.addEventListener("load", ok)
-        );
+        promise = new Promise((ok) => {
+          clonedElement.addEventListener("load", ok);
+          clonedElement.addEventListener("error", ok);
+        });
 
       scriptElement.parentNode!.replaceChild(clonedElement, scriptElement);
       if (promise) await promise;

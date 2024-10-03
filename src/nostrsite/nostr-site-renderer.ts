@@ -538,6 +538,7 @@ export class NostrSiteRenderer implements Renderer {
 
   public async render(path: string) {
     const route = this.router!.route(path);
+    console.log("route", route);
 
     // NOTE: context.context might differ from route.context
     // due to 404 Not Found errors etc

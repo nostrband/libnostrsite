@@ -9,7 +9,7 @@ export class DefaultRouter implements Router {
   }
 
   route(path: string): Route {
-    path = path.split("?")[0];
+    path = decodeURI(path.split("?")[0]);
 
     // canonical form has trailing slash
     if (!path.endsWith("/")) path += "/";
