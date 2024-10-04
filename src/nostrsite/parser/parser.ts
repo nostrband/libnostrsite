@@ -19,6 +19,7 @@ import { dbi } from "../store/db";
 import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
 import markedPlaintify from "marked-plaintify";
 import { decodeGeoHash } from "../geohash";
+import { parseATag } from "../..";
 
 const NJUMP_DOMAIN = "njump.me";
 
@@ -709,13 +710,10 @@ export class NostrParser {
     try {
       const ids = tags(e, "e").map((t) => nip19.noteEncode(t[1]));
       const addrs = tags(e, "a")
-        .map((t) => t[1].split(":"))
+        .map((t) => parseATag(t[1]))
+        .filter(Boolean)
         .map((v) =>
-          nip19.naddrEncode({
-            identifier: v[2],
-            kind: parseInt(v[0]),
-            pubkey: v[1],
-          })
+          nip19.naddrEncode(v!)
         );
       return [...ids, ...addrs];
     } catch (err) {

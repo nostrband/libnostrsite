@@ -925,3 +925,18 @@ export function matchPostsToFilters(
   // @ts-ignore
   return !!filters.find((f) => matchFilter(f, e));
 }
+
+export function parseATag(a: string | null | undefined) {
+  // instead of just split(":") which doesn't work for
+  // referenced d-tags containing ':' we have to make sure we
+  // only split by the first ':' instances to get this:
+  // "a:b:c:d" => ["a", "b", "c:d"]
+  if (!a) return undefined;
+  const r = a.split(":");
+  if (r.length < 3) return undefined;
+  return {
+    kind: parseInt(r[0]),
+    pubkey: r[1],
+    identifier: r.splice(0, 2).join(":"),
+  };
+}
