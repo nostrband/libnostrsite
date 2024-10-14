@@ -14,9 +14,9 @@ import {
   KIND_LONG_NOTE,
   KIND_MUSIC,
   KIND_NOTE,
-  KIND_PINNED,
-  KIND_PINNED_LONG_NOTES,
+  KIND_PINNED_TO_SITE,
   KIND_PROFILE,
+  KIND_SITE,
   MAX_OBJECTS_IIFE,
   MAX_OBJECTS_PREVIEW,
   MAX_OBJECTS_SSR,
@@ -43,8 +43,14 @@ import {
   fetchRelays,
   profileId,
   tags,
+  tv,
 } from "..";
-import { createSiteFilters, matchPostsToFilters, scanRelays } from "../..";
+import {
+  createSiteFilters,
+  matchPostsToFilters,
+  parseAddr,
+  scanRelays,
+} from "../..";
 
 export class NostrStore extends RamStore {
   private mode: RenderMode;
@@ -568,6 +574,7 @@ export class NostrStore extends RamStore {
     console.log("parseHashtags", post.id, hashtags);
     for (const tagName of hashtags) {
       const tagId = tagName.toLocaleLowerCase();
+      if (tagId.length > 128) continue; // FS issues
       if (allowed.length && !allowed.includes(tagId)) continue;
 
       const existingTag = this.tags.find((t) => t.id === tagId);
@@ -769,43 +776,41 @@ export class NostrStore extends RamStore {
   }
 
   private async fetchPinned() {
-    const pubkeys = this.settings.contributor_pubkeys.length
-      ? this.settings.contributor_pubkeys
-      : [this.settings.admin_pubkey];
+    const pubkey = this.settings.admin_pubkey;
 
-    const cachedEvents = this.useCache()
-      ? await dbi.listKindEvents(KIND_PINNED, 100)
-      : [];
+    const addr = parseAddr(this.settings.naddr);
+    const a_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
 
-    const pins = cachedEvents
-      .filter((e) => pubkeys.includes(e.pubkey))
-      .map((e) => new NDKEvent(this.ndk, e));
-    console.log("cached pins", pins, pubkeys);
+    const relays = [...this.settings.contributor_relays];
+    console.log("fetching pins", pubkey, relays);
 
-    const nonCachedPubkeys = [
-      ...new Set(pubkeys.filter((p) => !pins.find((e) => e.pubkey === p))),
-    ];
-
-    if (nonCachedPubkeys.length > 0) {
-      const relays = [...this.settings.contributor_relays];
-      console.log("fetching pins", nonCachedPubkeys, relays);
-      const events = await fetchEvents(
-        this.ndk,
-        {
-          kinds: [KIND_PINNED, KIND_PINNED_LONG_NOTES] as NDKKind[],
-          authors: nonCachedPubkeys,
-        },
-        relays,
-        1000 // timeoutMs
-      );
-      console.log("fetched pins", { events, relays });
-      if (events) {
-        pins.push(...events);
-        await this.storeEvents([...events]);
+    let event = await fetchEvent(
+      this.ndk,
+      {
+        "#d": [a_tag],
+        kinds: [KIND_PINNED_TO_SITE as NDKKind],
+        authors: [pubkey],
+      },
+      relays,
+      1000 // timeoutMs
+    );
+    console.log("fetched pins", { event, relays });
+    if (event) {
+      await this.storeEvents([event]);
+    } else {
+      if (this.useCache()) {
+        // relay issues etc
+        const cachedEvents = await dbi.listKindEvents(KIND_PINNED_TO_SITE, 100);
+        const cachedPins = cachedEvents.find(
+          (e) => e.pubkey === pubkey && tv(e, "d") === a_tag
+        );
+        console.log("cached pins", pubkey, cachedPins);
+        if (cachedPins) {
+          event = new NDKEvent(this.ndk, cachedPins);
+        }
       }
     }
-
-    this.parsePins(pins);
+    if (event) this.parsePins([event]);
   }
 
   private async assignAuthors() {

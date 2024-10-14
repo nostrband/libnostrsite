@@ -937,6 +937,6 @@ export function parseATag(a: string | null | undefined) {
   return {
     kind: parseInt(r[0]),
     pubkey: r[1],
-    identifier: r.splice(0, 2).join(":"),
+    identifier: r.slice(2).join(":"),
   };
 }

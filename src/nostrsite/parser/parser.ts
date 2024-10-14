@@ -5,7 +5,7 @@ import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { Marked, marked } from "marked";
 // import moment from "moment-timezone";
-import { KIND_NOTE, KIND_PACKAGE, KIND_SITE } from "../consts";
+import { KIND_LONG_NOTE, KIND_NOTE, KIND_PACKAGE, KIND_SITE } from "../consts";
 import { Profile } from "../types/profile";
 import { Author } from "../types/author";
 import { Theme } from "../types/theme";
@@ -294,7 +294,6 @@ export class NostrParser {
 
   private parseEventDefault(e: NDKEvent) {
     const id = eventId(e);
-    //    const html = await marked.parse(e.content);
     const post: Post = {
       type: "post",
       id,
@@ -321,7 +320,7 @@ export class NostrParser {
       codeinjection_foot: null,
       custom_template: null,
       canonical_url: null,
-      excerpt: tv(e, "summary") || tv(e, "description") || tv(e, "alt"),
+      excerpt: tv(e, "summary") || tv(e, "description"),
       reading_time: 0,
       access: true,
       og_image: null,
@@ -346,6 +345,11 @@ export class NostrParser {
       event: e.rawEvent(),
       show_title_and_feature_image: true,
     };
+
+    // only use alt for unknown kinds
+    if (!post.excerpt && e.kind !== KIND_NOTE && e.kind !== KIND_LONG_NOTE) {
+      post.excerpt = tv(e, "alt");
+    }
 
     const geohash = tags(e, "g")
       .filter((t) => t.length >= 2)

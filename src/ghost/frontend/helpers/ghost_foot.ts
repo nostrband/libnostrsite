@@ -176,7 +176,6 @@ export default function ghost_foot(options: any) {
     // load other posts and show them on the map
     foot.push(`
   <script type="text/javascript" src="${JS_MAPTALKS}"></script>
-  <div id="map" style='width: 100%; height: 50%; min-height: 300px'></div>
   <script>
     const container = document.querySelector("np-map");
     console.log("map", container);
