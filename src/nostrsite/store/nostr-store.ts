@@ -322,11 +322,13 @@ export class NostrStore extends RamStore {
     return this.settings.contributor_relays || this.settings.admin_relays;
   }
 
-  private async subscribeOnNewEvents(since: number) {
+  private async subscribeForNewEvents(since: number) {
     const relays = await this.getRelays();
     if (this.settings.include_all || !!this.settings.include_tags?.length) {
       await this.fetchByFilter(relays, since, 0, true);
     }
+
+    this.subscribeForPins(relays, since);
   }
 
   private async fetchAllObjects(
@@ -440,7 +442,7 @@ export class NostrStore extends RamStore {
     }
 
     // sync forward from 'since'
-    this.subscribeOnNewEvents(now);
+    this.subscribeForNewEvents(now);
   }
 
   private async loadSsr() {
@@ -474,7 +476,7 @@ export class NostrStore extends RamStore {
 
   private async processBatch() {
     await this.fetchContributors();
-    await this.fetchPinned();
+    await this.fetchPinList();
     await this.assignAuthors();
     await this.postProcess();
 
@@ -775,22 +777,31 @@ export class NostrStore extends RamStore {
     await this.fetchProfiles(pubkeys);
   }
 
-  private async fetchPinned() {
+  private getPinListFilter(): NDKFilter {
     const pubkey = this.settings.admin_pubkey;
 
     const addr = parseAddr(this.settings.naddr);
     const a_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
+
+    return {
+      "#d": [a_tag],
+      kinds: [KIND_PINNED_TO_SITE as NDKKind],
+      authors: [pubkey],
+    };
+  }
+
+  private async fetchPinList() {
+
+    const filter = this.getPinListFilter();
+    const pubkey = filter.authors![0];
+    const a_tag = filter["#d"]![0];
 
     const relays = [...this.settings.contributor_relays];
     console.log("fetching pins", pubkey, relays);
 
     let event = await fetchEvent(
       this.ndk,
-      {
-        "#d": [a_tag],
-        kinds: [KIND_PINNED_TO_SITE as NDKKind],
-        authors: [pubkey],
-      },
+      filter,
       relays,
       1000 // timeoutMs
     );
@@ -1025,6 +1036,9 @@ export class NostrStore extends RamStore {
   }
 
   private parsePins(events: NDKEvent[]) {
+    // reset
+    this.pins.length = 0;
+
     for (const e of events) {
       const pins = this.parser.parsePins(e);
       console.log("pins by", e.pubkey, pins);
@@ -1066,6 +1080,31 @@ export class NostrStore extends RamStore {
       (this.mode === "sw" || this.mode === "iife") && !navigator?.onLine;
     console.log("sw offline", offline, this.mode);
     return offline;
+  }
+
+  private subscribeForPins(relays: string[], since: number) {
+    if (this.isOffline()) return;
+
+    console.warn("subscribeForPins", since, relays);
+
+    const filter = this.getPinListFilter();
+    filter.since = since;
+
+    const sub = this.ndk.subscribe(
+      filter,
+      { groupable: false },
+      NDKRelaySet.fromRelayUrls(relays, this.ndk),
+      false // auto-start
+    );
+    this.subs.push(sub);
+
+    sub.on("event", async (event) => {
+      console.log("new pins list", event);
+      await this.storeEvents([event]);
+      this.parsePins([event]);
+    });
+
+    sub.start();
   }
 
   private async fetchByFilter(
