@@ -57,7 +57,7 @@ export const JS_SEARCH =
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.2.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
 export const JS_CONTENT_CTA =
- "https://cdn.npubpro.com/content-cta.iife.1.0.14.js";
+ "https://cdn.npubpro.com/content-cta.iife.1.0.15.js";
 export const JS_MAPTALKS = "https://cdn.npubpro.com/maptalks.min.js";
 export const CSS_MAPTALKS = "https://cdn.npubpro.com/maptalks.css";
 // export const JS_CONTENT_CTA =
