@@ -4,6 +4,7 @@ import {
   KIND_NOTE,
   KIND_PROFILE,
   KIND_SITE,
+  KIND_SITE_SUBMIT,
   OUTBOX_RELAYS,
   SITE_RELAY,
   SUPPORTED_KINDS,
@@ -811,6 +812,93 @@ export async function scanRelays(
   // return sorted newest events,
   // this will be empty if onBatch was specified
   return events.sort((a, b) => b.created_at! - a.created_at!);
+}
+
+export function createSiteSubmitFilters({
+  since,
+  until,
+  authors,
+  kinds,
+  hashtags,
+  limit,
+  settings,
+}: {
+  settings: Site;
+  limit: number;
+  since?: number;
+  until?: number;
+  kinds?: number[];
+  hashtags?: string[];
+  authors?: string[];
+}) {
+  // all pubkeys by default
+  authors = authors || settings.contributor_pubkeys;
+
+  const filters: NDKFilter[] = [];
+  const add = (kind: number, tag?: { tag: string; value: string }) => {
+    const tagKey = "#" + tag?.tag;
+    // reuse filters w/ same tag
+    let f: NDKFilter | undefined = filters.find((f) => {
+      // if (!f.kinds?.includes(kind)) return false;
+      if (!tag) return !Object.keys(f).find((k) => k.startsWith("#"));
+      else return tagKey in f;
+    });
+
+    if (!f) {
+      // first filter for this tag
+      f = {
+        // @ts-ignore
+        kinds: [KIND_SITE_SUBMIT],
+        "#p": authors,
+        "#k": ["" + kind],
+        limit,
+      };
+      if (tag) {
+        // @ts-ignore
+        f[tagKey] = [tag.value];
+      }
+      if (since) {
+        f!.since = since;
+      }
+      if (until) {
+        f!.until = until;
+      }
+
+      // append new filter
+      filters.push(f!);
+    } else {
+      // append tag and kind
+      if (tag) {
+        // @ts-ignore
+        if (!f[tagKey].includes(tag.value)) {
+          // @ts-ignore
+          f[tagKey].push(tag.value);
+        }
+      }
+      // @ts-ignore
+      if (!f["#k"]!.includes(kind)) f["#k"]!.push(kind);
+    }
+  };
+
+  if (!kinds) {
+    kinds = SUPPORTED_KINDS;
+  } else {
+    // filter invalid stuff
+    kinds = kinds.filter((k) => SUPPORTED_KINDS.includes(k));
+  }
+  // console.log("kinds", kinds, SUPPORTED_KINDS, this.settings.include_kinds);
+
+  const addAll = (tag?: { tag: string; value: string }) => {
+    for (const k of kinds!) add(k, tag);
+  };
+
+  if (hashtags) {
+    for (const t of hashtags) addAll({ tag: "t", value: t });
+  } else {
+    addAll();
+  }
+
+  return filters;
 }
 
 export function createSiteFilters({

@@ -413,3 +413,20 @@ export function ensureNumber(v: any | undefined): number | undefined {
   if (v === undefined) return undefined;
   return toNumber(v);
 }
+
+export function normalizeRelayUrl(r: string) {
+  try {
+    return new URL(r).href;
+  } catch {
+    return undefined;
+  }
+}
+export function hintsToRelays(relayHints: string[]): string[] {
+  return [
+    ...new Set(
+      relayHints
+        .map((r) => normalizeRelayUrl(r))
+        .filter((r) => !!r && !BLACKLISTED_RELAYS.includes(r)) as string[]
+    ),
+  ];
+}

@@ -17,6 +17,7 @@ import {
   KIND_PINNED_TO_SITE,
   KIND_PROFILE,
   KIND_SITE,
+  KIND_SITE_SUBMIT,
   MAX_OBJECTS_IIFE,
   MAX_OBJECTS_PREVIEW,
   MAX_OBJECTS_SSR,
@@ -41,16 +42,19 @@ import {
   fetchEvent,
   fetchEvents,
   fetchRelays,
+  hintsToRelays,
   profileId,
   tags,
   tv,
 } from "..";
 import {
   createSiteFilters,
+  createSiteSubmitFilters,
   matchPostsToFilters,
   parseAddr,
   scanRelays,
 } from "../..";
+import { Submit } from "../types/submit";
 
 export class NostrStore extends RamStore {
   private mode: RenderMode;
@@ -64,6 +68,7 @@ export class NostrStore extends RamStore {
   private getUrlCb?: (o: StoreObject) => string;
   private fetchContextDone = new Set<string>();
   private pinsFetched = false;
+  private submittedEvents = new Map<string, Submit>();
 
   constructor(
     mode: RenderMode = "iife",
@@ -87,7 +92,10 @@ export class NostrStore extends RamStore {
   }
 
   public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
-    return matchPostsToFilters(e, this.filters);
+    return (
+      matchPostsToFilters(e, this.filters) ||
+      this.submittedEvents.has(eventId(e))
+    );
   }
 
   private async loadFromDb(limit: number) {
@@ -175,13 +183,6 @@ export class NostrStore extends RamStore {
 
     this.settings.contributor_relays = write;
     this.settings.contributor_inbox_relays = read;
-
-    // // limit number of relays if we care about latency
-    // if (this.mode === "iife" || this.mode === "preview")
-    //   this.settings.contributor_relays.length = Math.min(
-    //     this.settings.contributor_relays.length,
-    //     5
-    //   );
 
     console.log("contributor outbox relays", this.settings.contributor_relays);
   }
@@ -338,12 +339,14 @@ export class NostrStore extends RamStore {
       until = 0,
       slow = false,
       filters,
+      submitFilters,
       timeout,
     }: {
       since?: number;
       until?: number;
       slow?: boolean;
       filters?: NDKFilter[];
+      submitFilters?: NDKFilter[];
       timeout?: number;
     }
   ) {
@@ -351,6 +354,9 @@ export class NostrStore extends RamStore {
 
     const relays = await this.getRelays();
     console.log(Date.now(), "sync start max", max, relays, filters);
+
+    filters = filters || this.createTagFilters({});
+    submitFilters = submitFilters || this.createSubmitFilters({});
 
     timeout =
       timeout ||
@@ -361,44 +367,49 @@ export class NostrStore extends RamStore {
         : 10000);
     const threads = slow ? 5 : this.mode === "ssr" ? 50 : 15;
 
+    const onBatch = async (events: NDKEvent[]) => {
+      await this.storeEvents(events);
+      await this.parseEvents(events);
+      await this.processBatch();
+      console.warn(
+        Date.now(),
+        "scan batch events",
+        events.length,
+        "posts",
+        this.posts.length
+      );
+    };
+
     let promises = [];
     if (this.settings.include_all || !!this.settings.include_tags?.length) {
       promises.push(
-        (async () => {
-          filters = filters || this.createTagFilters({});
-          await scanRelays(this.ndk, filters, relays, max, {
-            matcher: (e) => this.matchObject(e),
-            onBatch: async (events) => {
-              await this.storeEvents(events);
-              await this.parseEvents(events);
-              await this.processBatch();
-              console.warn(
-                Date.now(),
-                "scan batch events",
-                events.length,
-                "posts",
-                this.posts.length
-              );
-            },
-            since,
-            until,
-            timeout,
-            threads,
-          });
-        })()
+        scanRelays(this.ndk, filters, relays, max, {
+          matcher: (e) => this.matchObject(e),
+          onBatch,
+          since,
+          until,
+          timeout,
+          threads,
+        })
       );
     }
+
+    // fetch submit events
+    promises.push(
+      scanRelays(this.ndk, submitFilters, relays, max, {
+        matcher: () => true,
+        onBatch,
+        since,
+        until,
+        timeout,
+        threads,
+      })
+    );
 
     await Promise.all(promises);
 
     console.log(Date.now(), "sync done all posts", this.posts.length, filters);
   }
-
-  // private getUntil() {
-  //   return this.posts
-  //     .map((p) => p.event.created_at!)
-  //     .reduce((pv, cv) => Math.min(pv, cv), Math.floor(Date.now() / 1000));
-  // }
 
   private async getSynched() {
     const sync = await dbi.getSync();
@@ -694,7 +705,21 @@ export class NostrStore extends RamStore {
     // now when linked events are cached we can
     // parse events and use linked events to
     // format content
+    const newSubmitEvents: string[] = [];
     for (const e of events) {
+      // submit events
+      if (e.kind === KIND_SITE_SUBMIT) {
+        const submit = await this.parser.parseSubmitEvent(e);
+        if (!submit) continue;
+
+        const existing = this.submittedEvents.get(submit.eventAddress);
+        if (!existing || existing.event.created_at < submit.event.created_at) {
+          this.submittedEvents.set(submit.eventAddress, submit);
+          newSubmitEvents.push(submit.eventAddress);
+        }
+        continue;
+      }
+
       const post = await this.parser.parseEvent(e, this);
       if (!post) continue;
 
@@ -721,6 +746,8 @@ export class NostrStore extends RamStore {
 
       console.debug(related ? "related" : "post", post);
     }
+
+    await this.fetchSubmitted(newSubmitEvents);
   }
 
   private async postProcess() {
@@ -791,7 +818,6 @@ export class NostrStore extends RamStore {
   }
 
   private async fetchPinList() {
-
     const filter = this.getPinListFilter();
     const pubkey = filter.authors![0];
     const a_tag = filter["#d"]![0];
@@ -852,6 +878,75 @@ export class NostrStore extends RamStore {
     }
   }
 
+  protected async fetchSubmitted(ids: string[]) {
+    console.log("fetchSubmitted", ids);
+
+    // check cache first
+    const events: NDKEvent[] = [];
+    if (this.useCache()) {
+      const cached = await dbi.listEventsByIds(ids);
+      console.log("cached submitted", cached);
+      events.push(...cached.map((e) => new NDKEvent(this.ndk!, e)));
+      ids = ids.filter((id) => !cached.find((e) => eventId(e) === id));
+    }
+
+    // build filters and relay hints for non-cached events
+    const idFilter: NDKFilter = { ids: [] };
+    const naddrFilters: NDKFilter[] = [];
+
+    const relayHints = [
+      ...this.settings.contributor_relays,
+      ...this.settings.contributor_inbox_relays,
+    ];
+
+    for (const id of ids) {
+      // NOTE: ids are expected to have been `normalizeId`-ed
+      const { type, data } = nip19.decode(id);
+      switch (type) {
+        case "note":
+          idFilter.ids!.push(data);
+          break;
+        case "naddr":
+          naddrFilters.push({
+            kinds: [data.kind],
+            authors: [data.pubkey],
+            "#d": [data.identifier],
+          });
+          break;
+        default:
+          throw new Error("Invalid related id " + id);
+      }
+
+      const submit = this.submittedEvents.get(id);
+      if (submit) relayHints.push(submit.relay);
+    }
+
+    // filter list
+    const filters: NDKFilter[] = [...naddrFilters];
+    if (idFilter.ids!.length) filters.push(idFilter);
+
+    // normalize, dedup
+    const relays = hintsToRelays(relayHints);
+
+    // fetch from relay hints
+    if (filters.length) {
+      const newEvents = await fetchEvents(this.ndk, filters, relays, 3000);
+      console.log("fetchSubmitted got", ids, newEvents);
+
+      await this.storeEvents([...newEvents]);
+
+      events.push(...newEvents);
+    }
+
+    ids = ids.filter((id) => !events.find((e) => eventId(e) === id));
+    if (ids.length) {
+      // FIXME fetch from outbox relays of submit pubkeys
+      console.log("NOT FOUND submitted", ids);
+    }
+
+    await this.parseEvents([...events]);
+  }
+
   protected async fetchRelated(ids: string[], relayHints: []) {
     console.log("fetchRelated", ids);
 
@@ -874,6 +969,10 @@ export class NostrStore extends RamStore {
           idFilter.ids!.push(data);
           break;
         case "naddr":
+          // NOTE: it is expensive to have a filter per
+          // naddr, but more precise, and since related
+          // fetch is expected to have a small number of
+          // items per page we'll go with this options
           naddrFilters.push({
             kinds: [data.kind],
             authors: [data.pubkey],
@@ -1065,6 +1164,33 @@ export class NostrStore extends RamStore {
     const limit = Math.min(this.maxObjects * 2, 300);
 
     return createSiteFilters({
+      since,
+      until,
+      authors,
+      kinds,
+      hashtags,
+      limit,
+      settings: this.settings,
+    });
+  }
+
+  private createSubmitFilters({
+    since,
+    until,
+    authors,
+    kinds,
+    hashtags,
+  }: {
+    since?: number;
+    until?: number;
+    authors?: string[];
+    kinds?: number[];
+    hashtags?: string[];
+  }) {
+    // limit the batch to 300 submit events
+    const limit = Math.min(this.maxObjects, 300);
+
+    return createSiteSubmitFilters({
       since,
       until,
       authors,

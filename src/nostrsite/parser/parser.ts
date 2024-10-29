@@ -1,11 +1,17 @@
 import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import { Site } from "../types/site";
-import { eventId, profileId, tags, tv } from "./utils";
+import { eventId, profileId, tag, tags, tv } from "./utils";
 import { nip19 } from "nostr-tools";
 import { Post } from "../types/post";
 import { Marked, marked } from "marked";
 // import moment from "moment-timezone";
-import { KIND_LONG_NOTE, KIND_NOTE, KIND_PACKAGE, KIND_SITE } from "../consts";
+import {
+  KIND_LONG_NOTE,
+  KIND_NOTE,
+  KIND_PACKAGE,
+  KIND_SITE,
+  SUPPORTED_KINDS,
+} from "../consts";
 import { Profile } from "../types/profile";
 import { Author } from "../types/author";
 import { Theme } from "../types/theme";
@@ -20,6 +26,7 @@ import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
 import markedPlaintify from "marked-plaintify";
 import { decodeGeoHash } from "../geohash";
 import { parseATag } from "../..";
+import { Submit } from "../types/submit";
 
 const NJUMP_DOMAIN = "njump.me";
 
@@ -273,6 +280,43 @@ export class NostrParser {
     }
     console.log("parsed theme", theme);
     return theme;
+  }
+
+  public async parseSubmitEvent(e: NDKEvent) {
+    const submit: Submit = {
+      event: e.rawEvent(),
+      eventAddress: "",
+      relay: "",
+      pubkey: tv(e, "p") || "",
+      kind: parseInt(tv(e, "k") || "0"),
+      hashtags: tags(e, "t", 2).map((t) => t[1]),
+    };
+    if (!SUPPORTED_KINDS.includes(submit.kind) || !submit.pubkey)
+      return undefined;
+
+    try {
+      const e_tag = tag(e, "e");
+      if (e_tag && e_tag.length >= 2) {
+        submit.eventAddress = nip19.noteEncode(e_tag[1]);
+        if (e_tag.length >= 3) submit.relay = e_tag[2];
+      } else {
+        const a_tag = tag(e, "a");
+        if (a_tag && a_tag.length >= 2) {
+          const addr = parseATag(a_tag[1]);
+          submit.eventAddress = nip19.naddrEncode({
+            identifier: addr!.identifier,
+            kind: addr!.kind,
+            pubkey: addr!.pubkey,
+          });
+          if (a_tag.length >= 3) submit.relay = a_tag[2];
+        }
+      }
+    } catch (err) {
+      console.log("Bad submit event ref", e, err);
+      return undefined;
+    }
+    if (!submit.eventAddress) return undefined;
+    return submit;
   }
 
   public async parseEvent(e: NDKEvent, store?: Store) {
@@ -716,9 +760,7 @@ export class NostrParser {
       const addrs = tags(e, "a")
         .map((t) => parseATag(t[1]))
         .filter(Boolean)
-        .map((v) =>
-          nip19.naddrEncode(v!)
-        );
+        .map((v) => nip19.naddrEncode(v!));
       return [...ids, ...addrs];
     } catch (err) {
       console.log("bad pins list", e, err);

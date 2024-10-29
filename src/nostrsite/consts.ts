@@ -4,6 +4,7 @@ export const KIND_RELAYS = 10002;
 export const KIND_PINNED_TO_SITE = 30516;
 export const KIND_SITE = 30512;
 export const KIND_THEME = 30514;
+export const KIND_SITE_SUBMIT = 30517;
 export const KIND_PACKAGE = 1036;
 export const KIND_NOTE = 1;
 export const KIND_LONG_NOTE = 30023;
