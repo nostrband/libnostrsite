@@ -99,7 +99,10 @@ export class NostrStore extends RamStore {
   }
 
   private async loadFromDb(limit: number) {
-    const events = await dbi.listEvents(limit);
+    const submits = await dbi.listKindEvents(KIND_SITE_SUBMIT, limit);
+    await this.parseEvents(submits.map((e) => new NDKEvent(this.ndk, e)));
+
+    const events = await dbi.listPostEvents(limit);
 
     // NOTE: it's hard to know which events are 'related'
     // and which belong to the site, so we just rely on
@@ -699,6 +702,8 @@ export class NostrStore extends RamStore {
   }
 
   private async parseEvents(events: NDKEvent[], related: boolean = false) {
+    if (!events.length) return;
+
     // pre-parse and fetch all linked events
     await this.fetchProfileLinks(events);
 
@@ -879,6 +884,8 @@ export class NostrStore extends RamStore {
   }
 
   protected async fetchSubmitted(ids: string[]) {
+    if (!ids.length) return;
+
     console.log("fetchSubmitted", ids);
 
     // check cache first

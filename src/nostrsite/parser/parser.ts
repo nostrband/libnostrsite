@@ -733,7 +733,7 @@ export class NostrParser {
     return this.config.get(name);
   }
 
-  public parseHashtags(e: NDKEvent): string[] {
+  public parseHashtags(e: NDKEvent | NostrEvent): string[] {
     return [...new Set(tags(e, "t").map((tv) => tv[1]))];
   }
 

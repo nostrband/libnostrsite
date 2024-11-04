@@ -14,3 +14,4 @@ export * from "./store";
 export * from "./tag";
 export * from "./templater";
 export * from "./theme";
+export * from "./submit";

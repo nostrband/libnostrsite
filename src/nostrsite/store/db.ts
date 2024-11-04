@@ -1,6 +1,6 @@
 import { NDKEvent, NostrEvent } from "@nostr-dev-kit/ndk";
 import Dexie from "dexie";
-import { KIND_PROFILE } from "..";
+import { KIND_PROFILE, SUPPORTED_KINDS } from "..";
 import { nip19 } from "nostr-tools";
 
 export interface DbSite {
@@ -103,11 +103,17 @@ export const dbi = {
       console.log(`db addEvents error: ${error}`);
     }
   },
-  listEvents: async (limit: number) => {
+  listPostEvents: async (limit: number) => {
     try {
-      return (await db.events.reverse().sortBy("created_at")).slice(0, limit);
+      return (
+        await db.events
+          .where("kind")
+          .anyOf(SUPPORTED_KINDS)
+          .reverse()
+          .sortBy("created_at")
+      ).slice(0, limit);
     } catch (error) {
-      console.log(`db listEvents error: ${error}`);
+      console.log(`db listPostEvents error: ${error}`);
       return [];
     }
   },
@@ -132,13 +138,21 @@ export const dbi = {
         else if (type === "naddr") addrs.push(data);
         else throw new Error("Bad ids");
       }
-//      const eventsByIds = await db.events.where("id").anyOf(eventIds).toArray();
-      const eventsByIds = (await db.events.bulkGet(eventIds)).filter(e => !!e);
+      //      const eventsByIds = await db.events.where("id").anyOf(eventIds).toArray();
+      const eventsByIds = (await db.events.bulkGet(eventIds)).filter(
+        (e) => !!e
+      );
       const eventsByAddr = await db.events
         .where("[kind+pubkey+d_tag]")
         .anyOf(addrs.map((a) => [a.kind, a.pubkey, a.identifier]))
         .toArray();
-      console.log("listEventsByIds", eventIds, addrs, eventsByIds, eventsByAddr);
+      console.log(
+        "listEventsByIds",
+        eventIds,
+        addrs,
+        eventsByIds,
+        eventsByAddr
+      );
       // merge and sort by created_at desc
       // @ts-ignore
       return [...eventsByIds, ...eventsByAddr].sort(
@@ -161,10 +175,8 @@ export const dbi = {
   },
   deleteEvents: async (ids?: string[]) => {
     try {
-      if (ids)
-        return await db.events.bulkDelete(ids);
-      else
-        return await db.events.where("kind").notEqual(0).delete();
+      if (ids) return await db.events.bulkDelete(ids);
+      else return await db.events.where("kind").notEqual(0).delete();
     } catch (error) {
       console.log(`db deleteEvents error: ${error}`);
       return [];
