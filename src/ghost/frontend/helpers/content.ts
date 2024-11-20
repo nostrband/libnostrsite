@@ -157,15 +157,16 @@ export default function content(options: any = {}) {
       client = new URL(site.url).hostname;
     } catch {}
 
-    html += `<zap-threads 
-  style="margin-top: 0"
-  npubpro="true"
-  mode="chat"
-  disable="likes,zaps"
-  anchor="${self.id}"
-  relays="${relays.join(",")}"
-  client="${client}"
-  ></zap-threads>`;
+    html += `<np-content-comments 
+  data-id="${self.id}"
+  data-relays="${relays.join(",")}"
+  data-client="${client}"
+  ></np-content-comments>`;
+
+    html += `<np-content-dm 
+  data-peer-npub="${self.npub}"
+  data-relays="${relays.join(",")}"
+  ></np-content-dm>`;
   }
 
   return new SafeString(html);

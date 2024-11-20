@@ -14,6 +14,7 @@ import {
   JS_VENOBOX,
   JS_ZAP,
   JS_ZAPTHREADS,
+  JS_ZAPTHREADS_PLUGIN,
 } from "../../..";
 
 // We use the name ghost_foot to match the helper for consistency:
@@ -73,8 +74,9 @@ export default function ghost_foot(options: any) {
   `);
 
     foot.push(`
-  <script type="text/javascript" async src="${JS_ZAPTHREADS}"></script>
-`);
+    <script type="text/javascript" async src="${JS_ZAPTHREADS}"></script>
+    <script type="text/javascript" async src="${JS_ZAPTHREADS_PLUGIN}"></script>
+    `);
 
     foot.push(`
   <script type="text/javascript" async src="${JS_CONTENT_CTA}"></script>
@@ -91,7 +93,7 @@ export default function ghost_foot(options: any) {
 
     foot.push(`
   <script async src="${JS_NOSTR_LOGIN}"
-    data-perms="sign_event:1,sign_event:7,sign_event:3,sign_event:9734,sign_event:10003"
+    data-perms="sign_event:1,sign_event:7,sign_event:3,sign_event:9734,sign_event:10003,sign_event:9802,nip04_encrypt,nip04_decrypt"
     data-start-screen="local-signup"
     data-signup-relays="${relays}"
   ></script>
@@ -111,13 +113,6 @@ export default function ghost_foot(options: any) {
         }
 
         const npub = window.nostrSite.nostrTools.nip19.npubEncode(await window.nostr.getPublicKey());
-        const zapThreads = document.querySelector('zap-threads');
-        if (zapThreads) {
-          if (window.__nlAuthed)
-            zapThreads.setAttribute("user", npub);
-          else
-            zapThreads.setAttribute("user", "");
-        }
         const zapButton = document.querySelector('#zap-button');
         if (zapButton) {
           if (window.__nlAuthed)

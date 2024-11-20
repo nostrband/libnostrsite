@@ -50,7 +50,8 @@ export const JS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
 export const CSS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
-export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.5.8.js";
+export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.6.0.js";
+export const JS_ZAPTHREADS_PLUGIN = "https://cdn.npubpro.com/nostr-site-zapthreads.1.0.0.js";
 export const JS_NOSTR_LOGIN =
   "https://unpkg.com/nostr-login@1.6.7/dist/unpkg.js";
 export const JS_SEARCH =
@@ -58,7 +59,7 @@ export const JS_SEARCH =
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.2.js";
 export const JS_EMBEDS = "https://cdn.npubpro.com/embeds.iife.1.0.4.js";
 export const JS_CONTENT_CTA =
- "https://cdn.npubpro.com/content-cta.iife.1.0.16.js";
+ "https://cdn.npubpro.com/content-cta.iife.1.0.17.js";
 export const JS_MAPTALKS = "https://cdn.npubpro.com/maptalks.min.js";
 export const CSS_MAPTALKS = "https://cdn.npubpro.com/maptalks.css";
 // export const JS_CONTENT_CTA =

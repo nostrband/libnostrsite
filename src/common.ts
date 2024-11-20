@@ -385,7 +385,7 @@ class PluginEndpointImpl implements PluginEndpoint {
 }
 
 interface PluginState {
-  subs: Map<string, (data: any) => any>;
+  subs: Map<string, ((data: any) => any)[]>;
 }
 
 class PluginInterfaceImpl implements PluginInterface {
@@ -396,18 +396,22 @@ class PluginInterfaceImpl implements PluginInterface {
   }
 
   subscribe(id: string, event: string, cb: (data: any) => any) {
-    this.plugins.get(id)!.subs.set(event, cb);
+    const cbs = this.plugins.get(id)!.subs.get(event) || [];
+    cbs.push(cb);
+    this.plugins.get(id)!.subs.set(event, cbs);
   }
 
   dispatch(senderId: string, event: string, data: any) {
     console.log("plugins dispatch", event, "by", senderId, "data", data);
     for (const [id, state] of this.plugins.entries()) {
-      const cb = state.subs.get(event);
+      const cbs = state.subs.get(event);
 
       // FIXME check plugin is allowed to receive this event
-      if (cb) {
-        console.log("plugins deliver", event, "to", id, "data", data);
-        cb(data);
+      if (cbs) {
+        for (const cb of cbs) {
+          console.log("plugins deliver", event, "to", id, "data", data);
+          cb(data);
+        }
       }
     }
   }
