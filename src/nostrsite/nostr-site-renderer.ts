@@ -1,4 +1,10 @@
-import NDK, { NDKEvent, NDKFilter, NDKNip07Signer, NDKRelaySet, NostrEvent } from "@nostr-dev-kit/ndk";
+import NDK, {
+  NDKEvent,
+  NDKFilter,
+  NDKNip07Signer,
+  NDKRelaySet,
+  NostrEvent,
+} from "@nostr-dev-kit/ndk";
 
 // @ts-ignore FIXME ADD TYPES
 import BrowserHbs from "browser-hbs";
@@ -222,14 +228,13 @@ export class NostrSiteRenderer implements Renderer {
     // more info on preload/prefetch:
     // https://medium.com/reloading/preload-prefetch-and-priorities-in-chrome-776165961bbf
     const create = (url: string, as: string) => {
+      // NOTE: do not try to apply style in onload,
+      // it will cause stylesheet reload when we replace the html
+      // with the rendered page
       const link = document.createElement("link");
       link.rel = "preload";
       link.as = as;
       link.href = url;
-      // NOTE: do not try to apply style in onload,
-      // it will cause stylesheet reload when we replace the html
-      // with the rendered page
-      console.log("preloading", url);
       document.head.appendChild(link);
     };
     for (const e of theme.entries) {
@@ -405,7 +410,8 @@ export class NostrSiteRenderer implements Renderer {
   private getPageLimit(contexts: string[]) {
     return contexts.includes("rss")
       ? POSTS_PER_RSS
-      : ensureNumber(this.settings!.config.get("posts_per_page")) || DEFAULT_POSTS_PER_PAGE;
+      : ensureNumber(this.settings!.config.get("posts_per_page")) ||
+          DEFAULT_POSTS_PER_PAGE;
   }
 
   private async loadContextData(route: Route): Promise<Context> {
@@ -636,14 +642,22 @@ export class NostrSiteRenderer implements Renderer {
         if (urls.length > 0) add();
         else ok();
       };
-      const add = () => {
-        const u = urls.shift();
-        const r = new Request(u!, {
+      const add = async () => {
+        let u = urls.shift();
+        if (!u) return;
+        // FIXME consider it later
+        // const r = await fetchBlossom(u);
+        // if (r.url && r.url !== u) {
+        //   console.log("fixed blossom url", u, "=>", r.url);
+        //   u = r.url;
+        // }
+
+        const req = new Request(u!, {
           cache: "force-cache",
         });
         active++;
         // console.log(Date.now(), "sw cache", active, u);
-        cache.match(r).then((found) => {
+        cache.match(req).then((found) => {
           if (found) {
             // console.log(Date.now(), "sw already cached", u);
             return proceed();
@@ -651,7 +665,7 @@ export class NostrSiteRenderer implements Renderer {
 
           // fetch
           cache
-            .add(r)
+            .add(req)
             .then(proceed)
             .catch(() => {
               // console.log("Failed to put to cache", u, e);
@@ -828,16 +842,19 @@ export class NostrSiteRenderer implements Renderer {
     return profiles;
   }
 
-  public async publishEvent(event: NostrEvent, options?: { relays?: string[] }) {
+  public async publishEvent(
+    event: NostrEvent,
+    options?: { relays?: string[] }
+  ) {
     const e = new NDKEvent(this.ndk!, event);
     console.log("signing", event, e);
     const sig = await e.sign(new NDKNip07Signer());
     console.log("signed", e, sig);
     const relays = this.prepareRelays({
       relays: options ? options.relays : undefined,
-      outboxRelays: [0, 3, 10002].includes(event.kind!)
+      outboxRelays: [0, 3, 10002].includes(event.kind!),
     });
-    const r = await e.publish(NDKRelaySet.fromRelayUrls(relays, this.ndk!))
+    const r = await e.publish(NDKRelaySet.fromRelayUrls(relays, this.ndk!));
     console.log("published", e, r);
     return e.rawEvent();
   }

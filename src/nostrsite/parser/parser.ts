@@ -253,6 +253,12 @@ export class NostrParser {
         console.warn("Bad theme asset path", e);
         continue;
       }
+      const url = new URL(e.url);
+      // blacklisted!
+      if (url.hostname === "files.v0l.io") {
+        url.hostname = "cdn.nostrcheck.me";
+        e.url = url.toString();
+      }
 
       // FIXME think on this later
       // try {
