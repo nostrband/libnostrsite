@@ -438,7 +438,7 @@ export async function fetchBlossom(url: string) {
 
   // empty file
   if (
-    hash === "/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    hash === "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   )
     return new Response("", { status: 200 });
 
@@ -454,6 +454,7 @@ export async function fetchBlossom(url: string) {
     try {
       const r = await fetch(su);
       if (r.status !== 200) throw new Error("Failed to fetch " + su);
+      // FIXME check hash of payload!
       console.debug("fetched from network", url, su, r.status);
       return r;
     } catch (e) {
