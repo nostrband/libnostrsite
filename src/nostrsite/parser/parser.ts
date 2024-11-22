@@ -256,7 +256,7 @@ export class NostrParser {
       const url = new URL(e.url);
       // blacklisted!
       if (url.hostname === "files.v0l.io") {
-        url.hostname = "cdn.nostrcheck.me";
+        url.hostname = "blossom.npubpro.com";
         e.url = url.toString();
       }
 

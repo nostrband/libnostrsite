@@ -434,11 +434,11 @@ export function hintsToRelays(relayHints: string[]): string[] {
 
 export async function fetchBlossom(url: string) {
   const u = new URL(url);
+  const hash = u.pathname.split("/")[1];
 
   // empty file
   if (
-    u.pathname ===
-    "/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    hash === "/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   )
     return new Response("", { status: 200 });
 
