@@ -1,4 +1,4 @@
-import { BLOSSOM_FALLBACKS } from "..";
+import { fetchBlossom } from "..";
 import {
   DEFAULT_PARTIALS,
   DEFAULT_PARTIALS_DIR_NAME,
@@ -81,30 +81,34 @@ export class DefaultAssetFetcher implements AssetFetcher {
       }
     }
 
-    const u = new URL(url);
+    const r = await fetchBlossom(url);
+    const d = await r.text();
+    this.cache.set(url, d);
+    return d;
+    // const u = new URL(url);
 
-    // try several servers - fallbacks have discovery
-    // enabled and might find the file even if it's
-    // never been uploaded to them
-    const urls = [
-      url,
-      ...BLOSSOM_FALLBACKS.map((s) => s + u.pathname + u.search),
-    ];
+    // // try several servers - fallbacks have discovery
+    // // enabled and might find the file even if it's
+    // // never been uploaded to them
+    // const urls = [
+    //   url,
+    //   ...BLOSSOM_FALLBACKS.map((s) => s + u.pathname + u.search),
+    // ];
 
-    for (const su of urls) {
-      try {
-        const r = await fetch(su);
-        if (r.status !== 200) throw new Error("Failed to fetch "+su);
-        const d = await r.text();
-        console.debug("fetched from network", url, su, r.status);
-        this.cache.set(url, d);
-        return d;
-      } catch (e) {
-        console.warn("failed to fetched from network", su, e);
-      }
-    }
+    // for (const su of urls) {
+    //   try {
+    //     const r = await fetch(su);
+    //     if (r.status !== 200) throw new Error("Failed to fetch "+su);
+    //     const d = await r.text();
+    //     console.debug("fetched from network", url, su, r.status);
+    //     this.cache.set(url, d);
+    //     return d;
+    //   } catch (e) {
+    //     console.warn("failed to fetched from network", su, e);
+    //   }
+    // }
 
-    throw new Error("Failed to fetch asset " + url);
+    // throw new Error("Failed to fetch asset " + url);
   }
 
   private async fetchCached(url: string) {

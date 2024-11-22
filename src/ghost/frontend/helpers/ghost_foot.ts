@@ -120,13 +120,6 @@ export default function ghost_foot(options: any) {
           else
             zapButton.setAttribute("data-anon", "true");
         }
-        const cta = document.querySelector('np-content-cta');
-        if (cta) {
-          if (window.__nlAuthed)
-            cta.setAttribute("data-user-npub", npub);
-          else
-            cta.setAttribute("data-user-npub", "");
-        }
       });  
     })();
   </script>

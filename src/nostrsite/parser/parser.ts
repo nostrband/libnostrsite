@@ -22,7 +22,7 @@ import { SiteAddr } from "../types/site-addr";
 import { slugify } from "../../ghost/helpers/slugify";
 import { load as loadHtml } from "cheerio";
 import { dbi } from "../store/db";
-import { Store, isAudioUrl, isImageUrl, isVideoUrl } from "..";
+import { Store, fetchBlossom, isAudioUrl, isImageUrl, isVideoUrl } from "..";
 import markedPlaintify from "marked-plaintify";
 import { decodeGeoHash } from "../geohash";
 import { parseATag } from "../..";
@@ -253,6 +253,20 @@ export class NostrParser {
         console.warn("Bad theme asset path", e);
         continue;
       }
+
+      // FIXME think on this later
+      // try {
+      //   const r = await fetchBlossom(e.url);
+      //   console.log("checked", e.url, r.url);
+      //   // fix url if original server isn't working
+      //   if (r.url && r.url !== e.url) {
+      //     console.log("fixed blossom asset url", e.url, "=>", r.url);
+      //     e.url = r.url;
+      //   }
+      // } catch (er: any) {
+      //   console.log("check failed for blossom", e.url, er);
+      // }
+
       const ext = name.split(".").pop();
       if (ext && ext !== name) e.url = `${e.url}.${ext}`;
     }
@@ -264,7 +278,7 @@ export class NostrParser {
       ? await dbi.getCache(packageJsonUrl)
       : undefined;
     const packageJson =
-      cachedPackageJson || (await fetch(packageJsonUrl).then((r) => r.json()));
+      cachedPackageJson || (await fetchBlossom(packageJsonUrl).then((r) => r.json()));
     if (this.useCache && !cachedPackageJson && packageJson) {
       await dbi.putCache(packageJsonUrl, packageJson);
     }

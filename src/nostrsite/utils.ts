@@ -1,6 +1,7 @@
 import NDK, { NDKEvent, NDKFilter, NDKRelaySet } from "@nostr-dev-kit/ndk";
 import {
   BLACKLISTED_RELAYS,
+  BLOSSOM_FALLBACKS,
   FALLBACK_OUTBOX_RELAYS,
   GOOD_RELAYS,
   KIND_CONTACTS,
@@ -429,4 +430,36 @@ export function hintsToRelays(relayHints: string[]): string[] {
         .filter((r) => !!r && !BLACKLISTED_RELAYS.includes(r)) as string[]
     ),
   ];
+}
+
+export async function fetchBlossom(url: string) {
+  const u = new URL(url);
+
+  // empty file
+  if (
+    u.pathname ===
+    "/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  )
+    return new Response("", { status: 200 });
+
+  // try several servers - fallbacks have discovery
+  // enabled and might find the file even if it's
+  // never been uploaded to them
+  const urls = [
+    url,
+    ...BLOSSOM_FALLBACKS.map((s) => s + u.pathname + u.search),
+  ];
+
+  for (const su of urls) {
+    try {
+      const r = await fetch(su);
+      if (r.status !== 200) throw new Error("Failed to fetch " + su);
+      console.debug("fetched from network", url, su, r.status);
+      return r;
+    } catch (e) {
+      console.warn("failed to fetched from network", su, e);
+    }
+  }
+
+  throw new Error("Failed to fetch asset " + url);
 }
