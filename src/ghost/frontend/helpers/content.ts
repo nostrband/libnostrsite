@@ -140,6 +140,9 @@ export default function content(options: any = {}) {
       data-cta-main="${site.config.get("content_cta_main") || "zap"}"
       data-button-color="${site.accent_color}"
       data-text-button-color="${getContrastingTextColor(site.accent_color)}"
+      data-event-addr="${self.id}"
+      data-event-id="${self.noteId}"
+      data-author-npub="${self.npub}"
     ></np-content-cta>
     <div
       style="display: none"

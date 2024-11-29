@@ -41,6 +41,7 @@ import {
   fetchEvent,
   fetchEvents,
   fetchOutboxRelays,
+  fetchRelays,
   isBlossomUrl,
   isEqualContentSettings,
 } from "./utils";
@@ -857,6 +858,10 @@ export class NostrSiteRenderer implements Renderer {
     const r = await e.publish(NDKRelaySet.fromRelayUrls(relays, this.ndk!));
     console.log("published", e, r);
     return e.rawEvent();
+  }
+
+  public async fetchRelays(pubkeys: string[]) {
+    return fetchRelays(this.ndk!, pubkeys);
   }
 
   public async fetchOutboxRelays(pubkeys: string[]) {
