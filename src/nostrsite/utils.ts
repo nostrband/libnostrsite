@@ -1,4 +1,9 @@
-import NDK, { NDKEvent, NDKFilter, NDKRelaySet } from "@nostr-dev-kit/ndk";
+import NDK, {
+  NDKEvent,
+  NDKFilter,
+  NDKRelaySet,
+  NostrEvent,
+} from "@nostr-dev-kit/ndk";
 import {
   BLACKLISTED_RELAYS,
   BLOSSOM_FALLBACKS,
@@ -28,7 +33,13 @@ export function isBlossomUrl(u: string) {
   }
 }
 
-export function isImageUrl(u: string) {
+export function findImeta(event: NostrEvent, u: string) {
+  return event.tags
+  .filter((t) => t.length > 1 && t[0] === "imeta")
+  .find((t) => t.find((v) => v === `url ${u}`));
+}
+
+export function isImageUrl(u: string, event?: NostrEvent) {
   try {
     const url = new URL(u);
     const ext = url.pathname.split(".").pop();
@@ -43,11 +54,17 @@ export function isImageUrl(u: string) {
       case "webp":
         return true;
     }
+
+    // no '.' in the last part of path?
+    if (ext?.includes("/") && event) {
+      const imeta = findImeta(event, u);
+      return imeta && imeta.find((v) => v.startsWith("m image/"));
+    }
   } catch {}
   return false;
 }
 
-export function isVideoUrl(u: string) {
+export function isVideoUrl(u: string, event?: NostrEvent) {
   try {
     const url = new URL(u);
     const ext = url.pathname.split(".").pop();
@@ -61,11 +78,16 @@ export function isVideoUrl(u: string) {
       case "ogv":
         return true;
     }
+
+    if (ext?.includes("/") && event) {
+      const imeta = findImeta(event, u);
+      return imeta && imeta.find((v) => v.startsWith("m video/"));
+    }
   } catch {}
   return false;
 }
 
-export function isAudioUrl(u: string) {
+export function isAudioUrl(u: string, event?: NostrEvent) {
   try {
     const url = new URL(u);
     const ext = url.pathname.split(".").pop();
@@ -78,6 +100,11 @@ export function isAudioUrl(u: string) {
       case "m3u":
       case "m3u8":
         return true;
+    }
+
+    if (ext?.includes("/") && event) {
+      const imeta = findImeta(event, u);
+      return imeta && imeta.find((v) => v.startsWith("m audio/"));
     }
   } catch {}
   return false;
@@ -267,6 +294,8 @@ export async function fetchEvents(
   relays: string[],
   timeoutMs: number = 1000
 ): Promise<Set<NDKEvent>> {
+  if (!filters || (Array.isArray(filters) && !filters.length))
+    throw new Error("Empty filters");
   relays = [...new Set(relays.filter((r) => !BLACKLISTED_RELAYS.includes(r)))];
 
   // don't go crazy here! just put higher-priority relays to

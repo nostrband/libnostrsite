@@ -504,9 +504,9 @@ export class NostrParser {
     // clear the links that weren't replaced w/ text
     let emojiContent = "";
     for (const l of post.links) {
-      if (isVideoUrl(l)) emojiContent = "🎥";
-      else if (isAudioUrl(l)) emojiContent = "🎵";
-      else if (isImageUrl(l)) emojiContent = "🖼️";
+      if (isVideoUrl(l, post.event)) emojiContent = "🎥";
+      else if (isAudioUrl(l, post.event)) emojiContent = "🎵";
+      else if (isImageUrl(l, post.event)) emojiContent = "🖼️";
 
       textContent = textContent.replace(l, "");
     }
@@ -657,11 +657,11 @@ export class NostrParser {
     // replace media links
     for (const url of allLinks) {
       let code = "";
-      if (isVideoUrl(url)) {
+      if (isVideoUrl(url, post.event)) {
         code = `<video controls src="${url}" style="width:100%;"></video>`;
-      } else if (isAudioUrl(url)) {
+      } else if (isAudioUrl(url, post.event)) {
         code = `<audio controls src="${url}"></audio>`;
-      } else if (isImageUrl(url)) {
+      } else if (isImageUrl(url, post.event)) {
         code = `<a href="${url}" class="vbx-media" target="_blank"><img class="venobox" src="${url}" /></a>`;
       }
 
@@ -893,7 +893,7 @@ export class NostrParser {
 
     // extract from string content
     const urls = this.parseLinks(post.event);
-    images.push(...urls.filter((u) => isImageUrl(u)));
+    images.push(...urls.filter((u) => isImageUrl(u, post.event)));
 
     // unique
     return [...new Set(images)];
@@ -904,7 +904,7 @@ export class NostrParser {
 
     // extract from string content
     const urls = this.parseLinks(post.event);
-    videos.push(...urls.filter((u) => isVideoUrl(u)));
+    videos.push(...urls.filter((u) => isVideoUrl(u, post.event)));
 
     // unique
     return [...new Set(videos)];
@@ -915,7 +915,7 @@ export class NostrParser {
 
     // extract from string content
     const urls = this.parseLinks(post.event);
-    audios.push(...urls.filter((u) => isAudioUrl(u)));
+    audios.push(...urls.filter((u) => isAudioUrl(u, post.event)));
 
     // unique
     return [...new Set(audios)];
