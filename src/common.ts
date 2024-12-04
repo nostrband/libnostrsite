@@ -22,9 +22,11 @@ import {
   Site,
   Store,
   User,
+  eventId,
   fetchEvent,
   fetchEvents,
   fetchOutboxRelays,
+  hintsToRelays,
   isAudioUrl,
   isImageUrl,
   isVideoUrl,
@@ -816,6 +818,82 @@ export async function scanRelays(
   // return sorted newest events,
   // this will be empty if onBatch was specified
   return events.sort((a, b) => b.created_at! - a.created_at!);
+}
+
+export async function fetchByIds(
+  ndk: NDK,
+  ids: string[],
+  relayHints: string[],
+  {
+    batchSize = 100,
+    timeout = 1000,
+  }: {
+    batchSize?: number;
+    timeout?: number;
+  } = {}
+) {
+  // normalize, dedup
+  const relays = hintsToRelays(relayHints);
+  console.log("fetchByIds", ids, "from", relays);
+
+  const events: NDKEvent[] = [];
+
+  // split into batches
+  while (ids.length) {
+    const batch = ids.splice(0, Math.min(batchSize, ids.length));
+
+    const idFilter: NDKFilter = { ids: [] };
+    const naddrFilter: NDKFilter = {
+      kinds: [],
+      authors: [],
+      "#d": [],
+    };
+
+    for (const id of batch) {
+      // NOTE: ids are expected to have been `normalizeId`-ed
+      const { type, data } = nip19.decode(id);
+      switch (type) {
+        case "note":
+          idFilter.ids!.push(data);
+          break;
+        case "naddr":
+          naddrFilter.kinds!.push(data.kind);
+          naddrFilter.authors!.push(data.pubkey);
+          naddrFilter["#d"]!.push(data.identifier);
+          break;
+        default:
+          throw new Error("Invalid id " + id);
+      }
+    }
+
+    // dedup filter values
+    naddrFilter.kinds = [...new Set(naddrFilter.kinds)];
+    naddrFilter.authors = [...new Set(naddrFilter.authors)];
+    naddrFilter["#d"] = [...new Set(naddrFilter["#d"])];
+
+    // filter list
+    const filters: NDKFilter[] = [];
+    if (idFilter.ids!.length) filters.push(idFilter);
+    if (naddrFilter.kinds!.length) filters.push(naddrFilter);
+
+    // fetch from relay hints
+    if (filters.length) {
+      const newEvents = await fetchEvents(ndk, filters, relays, timeout);
+      console.log("fetchByIds got", batch, newEvents);
+
+      // naddr filter might return irrelevant events,
+      // so we post-filter them here
+      events.push(...[...newEvents].filter((e) => ids.includes(eventId(e))));
+    }
+  }
+
+  const lostIds = ids.filter((id) => !events.find((e) => eventId(e) === id));
+  if (lostIds.length) {
+    // FIXME fall back to default relays?
+    console.log("NOT FOUND by ids", lostIds);
+  }
+
+  return events;
 }
 
 export function createSiteSubmitFilters({

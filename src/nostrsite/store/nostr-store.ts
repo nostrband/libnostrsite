@@ -9,7 +9,6 @@ import NDK, {
 import { Site } from "../types/site";
 import { RamStore } from "./ram-store";
 import {
-  BLACKLISTED_RELAYS,
   DEFAULT_MAX_LIMIT,
   KIND_LONG_NOTE,
   KIND_MUSIC,
@@ -42,7 +41,6 @@ import {
   fetchEvent,
   fetchEvents,
   fetchRelays,
-  hintsToRelays,
   profileId,
   tags,
   tv,
@@ -50,6 +48,7 @@ import {
 import {
   createSiteFilters,
   createSiteSubmitFilters,
+  fetchByIds,
   matchPostsToFilters,
   parseAddr,
   scanRelays,
@@ -646,7 +645,12 @@ export class NostrStore extends RamStore {
       for (const p of tags(e, "p")) {
         if (p[1].length !== 64) continue;
         pubkeys.push(p[1]);
-        if (p.length > 2 && p[2].startsWith("wss://")) relays.push(p[2]);
+        if (
+          p.length > 2 &&
+          typeof p[2] === "string" &&
+          p[2].startsWith("wss://")
+        )
+          relays.push(p[2]);
       }
     }
 
@@ -897,58 +901,22 @@ export class NostrStore extends RamStore {
       ids = ids.filter((id) => !cached.find((e) => eventId(e) === id));
     }
 
-    // build filters and relay hints for non-cached events
-    const idFilter: NDKFilter = { ids: [] };
-    const naddrFilters: NDKFilter[] = [];
-
-    const relayHints = [
-      ...this.settings.contributor_relays,
-      ...this.settings.contributor_inbox_relays,
-    ];
-
-    for (const id of ids) {
-      // NOTE: ids are expected to have been `normalizeId`-ed
-      const { type, data } = nip19.decode(id);
-      switch (type) {
-        case "note":
-          idFilter.ids!.push(data);
-          break;
-        case "naddr":
-          naddrFilters.push({
-            kinds: [data.kind],
-            authors: [data.pubkey],
-            "#d": [data.identifier],
-          });
-          break;
-        default:
-          throw new Error("Invalid related id " + id);
+    if (ids.length) {
+      // contributor relays + relays of submitted events
+      const relayHints = [
+        ...this.settings.contributor_relays,
+        ...this.settings.contributor_inbox_relays,
+      ];
+      for (const id of ids) {
+        const submit = this.submittedEvents.get(id);
+        if (submit) relayHints.push(submit.relay);
       }
 
-      const submit = this.submittedEvents.get(id);
-      if (submit) relayHints.push(submit.relay);
-    }
-
-    // filter list
-    const filters: NDKFilter[] = [...naddrFilters];
-    if (idFilter.ids!.length) filters.push(idFilter);
-
-    // normalize, dedup
-    const relays = hintsToRelays(relayHints);
-
-    // fetch from relay hints
-    if (filters.length) {
-      const newEvents = await fetchEvents(this.ndk, filters, relays, 3000);
-      console.log("fetchSubmitted got", ids, newEvents);
+      const newEvents = await fetchByIds(this.ndk, ids, relayHints);
 
       await this.storeEvents([...newEvents]);
 
       events.push(...newEvents);
-    }
-
-    ids = ids.filter((id) => !events.find((e) => eventId(e) === id));
-    if (ids.length) {
-      // FIXME fetch from outbox relays of submit pubkeys
-      console.log("NOT FOUND submitted", ids);
     }
 
     await this.parseEvents([...events]);
@@ -965,43 +933,14 @@ export class NostrStore extends RamStore {
       ids = ids.filter((id) => !cached.find((c) => eventId(c) === id));
     }
 
-    const idFilter: NDKFilter = { ids: [] };
-    const naddrFilters: NDKFilter[] = [];
-
-    for (const id of ids) {
-      // NOTE: ids are expected to have been `normalizeId`-ed
-      const { type, data } = nip19.decode(id);
-      switch (type) {
-        case "note":
-          idFilter.ids!.push(data);
-          break;
-        case "naddr":
-          // NOTE: it is expensive to have a filter per
-          // naddr, but more precise, and since related
-          // fetch is expected to have a small number of
-          // items per page we'll go with this options
-          naddrFilters.push({
-            kinds: [data.kind],
-            authors: [data.pubkey],
-            "#d": [data.identifier],
-          });
-          break;
-        default:
-          throw new Error("Invalid related id " + id);
-      }
-    }
-
-    const filters: NDKFilter[] = [...naddrFilters];
-    if (idFilter.ids!.length) filters.push(idFilter);
-
-    if (filters.length) {
+    if (ids.length) {
       const relays = [
-        ...relayHints.filter((r) => !BLACKLISTED_RELAYS.includes(r)),
+        ...relayHints,
         ...this.settings.contributor_relays,
         ...this.settings.contributor_inbox_relays,
       ];
 
-      const newEvents = await fetchEvents(this.ndk, filters, relays, 3000);
+      const newEvents = await fetchByIds(this.ndk, ids, relays);
       console.log("fetchRelated got", ids, newEvents);
 
       await this.storeEvents([...newEvents]);
