@@ -26,7 +26,7 @@ import { Store, fetchBlossom, isAudioUrl, isImageUrl, isVideoUrl } from "..";
 import markedPlaintify from "marked-plaintify";
 import { decodeGeoHash } from "../geohash";
 import { parseATag } from "../..";
-import { Submit } from "../types/submit";
+import { SUBMIT_STATE_ADD, Submit } from "../types/submit";
 
 const NJUMP_DOMAIN = "njump.me";
 
@@ -310,6 +310,7 @@ export class NostrParser {
       pubkey: tv(e, "p") || "",
       kind: parseInt(tv(e, "k") || "0"),
       hashtags: tags(e, "t", 2).map((t) => t[1]),
+      state: tv(e, 'state') || SUBMIT_STATE_ADD,
     };
     if (!SUPPORTED_KINDS.includes(submit.kind) || !submit.pubkey)
       return undefined;
