@@ -1000,8 +1000,10 @@ export function createSiteFilters({
   hashtags?: string[];
   authors?: string[];
 }) {
-  // all pubkeys by default
-  authors = authors || settings.contributor_pubkeys;
+  // requested authors (constrained to the contributors)
+  authors =
+    authors?.filter((a) => settings.contributor_pubkeys.includes(a)) ||
+    settings.contributor_pubkeys;
 
   const filters: NDKFilter[] = [];
   const add = (kind: number, tag?: { tag: string; value: string }) => {
@@ -1063,6 +1065,13 @@ export function createSiteFilters({
   };
 
   if (hashtags) {
+    if (!settings.include_all) {
+      if (!settings.include_tags) hashtags = [];
+      else
+        hashtags = hashtags.filter((h) =>
+          settings.include_tags!.find((t) => t.tag === "t" && t.value === h)
+        );
+    }
     for (const t of hashtags) addAll({ tag: "t", value: t });
   } else if (settings.include_all) {
     addAll();
