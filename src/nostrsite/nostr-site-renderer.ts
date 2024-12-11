@@ -135,15 +135,26 @@ export class NostrSiteRenderer implements Renderer {
   }
 
   private async fetchSite() {
+
+    // launch fetching from server in the background,
+    // then check cache and return from cache immediately,
+    // but then if new version is fetched from the server
+    // it will be written to cache and next page load will
+    // read from there!
+    const promise = new Promise<NDKEvent>((ok) => async () => {
+      const site = await fetchNostrSite(this.addr, this.ndk);
+      console.log("fetched site", site);
+      if (this.useCache() && site) await dbi.addEvents([site]);
+      ok(new NDKEvent(this.ndk, site));
+    });
+
     // cached sites
     if (this.useCache()) {
       const cachedSite = await getCachedSite(this.addr);
       if (cachedSite) return new NDKEvent(this.ndk, cachedSite);
     }
 
-    const site = await fetchNostrSite(this.addr, this.ndk);
-    if (this.useCache() && site) await dbi.addEvents([site]);
-    return new NDKEvent(this.ndk, site);
+    return promise;
   }
 
   private async fetchTheme() {
