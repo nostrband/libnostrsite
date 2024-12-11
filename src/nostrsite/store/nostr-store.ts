@@ -91,10 +91,12 @@ export class NostrStore extends RamStore {
   }
 
   public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
-    return (
+    const match = (
       matchPostsToFilters(e, this.filters) ||
       this.submittedEvents.has(eventId(e))
     );
+    // if (!match) console.log("skip ", e.id, e);
+    return match;
   }
 
   private async loadFromDb(limit: number) {

@@ -233,7 +233,9 @@ export async function fetchRelays(
       .map((r) => {
         try {
           const u = new URL(r);
-          if (u.protocol === "wss:" || u.protocol === "ws:") return u.href;
+          if (u.protocol !== "wss:" && u.protocol !== "ws:") return undefined;
+          if (u.hostname.endsWith(".onion")) return undefined;
+          return u.href;
         } catch {}
       })
       // only valid ones
