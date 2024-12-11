@@ -376,8 +376,8 @@ export default async function ghost_head(options: any) {
       head.push(`
     <link rel="icon" href="${site.icon}" type="${getMime(site.icon)}">
     <link rel="apple-touch-icon" href="${site.icon}">
-    <meta name="theme-color" content="#ffffff">
       `);
+      //      <meta name="theme-color" content="#ffffff">
     }
 
     const pagination = root.pagination;
@@ -574,6 +574,12 @@ export default async function ghost_head(options: any) {
     // AMP template has style injected directly because there can only be one <style amp-custom> tag
     if (options.data.site.accent_color && !includes(context, "amp")) {
       const accentColor = escapeExpression(options.data.site.accent_color);
+
+      head.push(`<meta name="theme-color" content="${accentColor}">`);
+      head.push(
+        `<meta name="msapplication-TileColor" content="${accentColor}">`
+      );
+
       const styleTag = `<style>:root {--ghost-accent-color: ${accentColor};}</style>`;
       const existingScriptIndex = findLastIndex(
         head,
