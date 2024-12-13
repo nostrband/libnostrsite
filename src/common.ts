@@ -839,8 +839,9 @@ export async function fetchByIds(
   const events: NDKEvent[] = [];
 
   // split into batches
-  while (ids.length) {
-    const batch = ids.splice(0, Math.min(batchSize, ids.length));
+  const queue = [...ids]
+  while (queue.length) {
+    const batch = queue.splice(0, Math.min(batchSize, queue.length));
 
     const idFilter: NDKFilter = { ids: [] };
     const naddrFilter: NDKFilter = {
