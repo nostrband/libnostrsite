@@ -483,7 +483,15 @@ export async function fetchBlossom(url: string) {
 
   for (const su of urls) {
     try {
-      const r = await fetch(su);
+
+      const controller = new AbortController();
+      const signal = controller.signal;
+      const to = setTimeout(() => {
+        controller.abort();
+        console.log("blossom fetch timeout", su);
+      }, 3000);
+      const r = await fetch(su, { signal });
+      clearTimeout(to);
       if (r.status !== 200) throw new Error("Failed to fetch " + su);
       // FIXME check hash of payload!
       console.debug("fetched from network", url, su, r.status);

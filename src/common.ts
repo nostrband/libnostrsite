@@ -916,6 +916,8 @@ export function createSiteSubmitFilters({
 }) {
   // all pubkeys by default
   authors = authors || settings.contributor_pubkeys;
+  const addr = parseAddr(settings.naddr);
+  const s_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
 
   const filters: NDKFilter[] = [];
   const add = (kind: number, tag?: { tag: string; value: string }) => {
@@ -932,7 +934,8 @@ export function createSiteSubmitFilters({
       f = {
         // @ts-ignore
         kinds: [KIND_SITE_SUBMIT],
-        "#p": authors,
+        "#s": [s_tag],
+        "authors": authors,
         "#k": ["" + kind],
         limit,
       };
