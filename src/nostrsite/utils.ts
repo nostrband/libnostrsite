@@ -11,6 +11,7 @@ import {
   GOOD_RELAYS,
   KIND_CONTACTS,
   KIND_RELAYS,
+  KIND_SITE,
   OUTBOX_RELAYS,
   Site,
   StoreObject,
@@ -18,6 +19,7 @@ import {
 } from ".";
 import { isPost, isTag, isUser } from "../ghost/frontend/utils/checks";
 import { isEqual, toNumber } from "lodash-es";
+import { parseAddr } from "..";
 
 export function isBlossomUrl(u: string) {
   try {
@@ -502,4 +504,17 @@ export async function fetchBlossom(url: string) {
   }
 
   throw new Error("Failed to fetch asset " + url);
+}
+
+export async function fetchSiteFile(ndk: NDK, naddr: string, name: string, relays: string[]) {
+  const addr = parseAddr(naddr);
+  const s_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
+  const d_tag = `${name}:${s_tag}`;
+  return fetchEvent(ndk, {
+    "#d": [d_tag],
+    "#s": [s_tag],
+    authors: [addr.pubkey],
+    // @ts-ignore
+    kinds: [KIND_SITE_FILE],
+  }, relays, 1000);
 }
