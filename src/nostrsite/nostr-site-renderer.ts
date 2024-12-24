@@ -22,6 +22,7 @@ import {
   JQUERY,
   KIND_PACKAGE,
   KIND_SITE,
+  KIND_SITE_FILE,
   MAX_OBJECTS_SSR,
   OUTBOX_RELAYS,
   POSTS_PER_RSS,
@@ -58,7 +59,7 @@ import {
   Tag,
 } from ".";
 import { DefaultAssetFetcher } from "./modules/default-asset-fetcher";
-import { fetchNostrSite, getCachedSite } from "..";
+import { fetchNostrSite, getCachedSite, parseAddr } from "..";
 import { nip19 } from "nostr-tools";
 import { DefaultRouter } from "./modules/default-router";
 
@@ -877,5 +878,19 @@ export class NostrSiteRenderer implements Renderer {
 
   public async fetchOutboxRelays(pubkeys: string[]) {
     return fetchOutboxRelays(this.ndk!, pubkeys);
+  }
+
+  public async fetchSiteFile(name: string) {
+    const addr = parseAddr(this.settings!.naddr);
+    const s_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
+    const d_tag = `${name}:${s_tag}`;
+    return fetchEvent(this.ndk!, {
+      "#d": [d_tag],
+      "#s": [s_tag],
+      authors: [...this.settings!.contributor_pubkeys, this.settings!.admin_pubkey],
+      // @ts-ignore
+      kinds: [KIND_SITE_FILE],
+    }, this.prepareRelays(), 1000)
+
   }
 }

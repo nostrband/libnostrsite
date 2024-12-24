@@ -5,6 +5,7 @@ export const KIND_PINNED_TO_SITE = 30516;
 export const KIND_SITE = 30512;
 export const KIND_THEME = 30514;
 export const KIND_SITE_SUBMIT = 30517;
+export const KIND_SITE_FILE = 30518;
 export const KIND_PACKAGE = 1036;
 export const KIND_NOTE = 1;
 export const KIND_LONG_NOTE = 30023;
@@ -50,7 +51,7 @@ export const JS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
 export const CSS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
-export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.6.0.js";
+export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.6.1.js";
 export const JS_ZAPTHREADS_PLUGIN = "https://cdn.npubpro.com/nostr-site-zapthreads.1.0.2.js";
 export const JS_NOSTR_LOGIN =
   "https://unpkg.com/nostr-login@1.6.14/dist/unpkg.js";
