@@ -12,6 +12,7 @@ import {
   KIND_CONTACTS,
   KIND_RELAYS,
   KIND_SITE,
+  KIND_SITE_FILE,
   OUTBOX_RELAYS,
   Site,
   StoreObject,
