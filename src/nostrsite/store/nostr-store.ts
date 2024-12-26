@@ -53,7 +53,7 @@ import {
   parseAddr,
   scanRelays,
 } from "../..";
-import { Submit } from "../types/submit";
+import { SUBMIT_STATE_ADD, Submit } from "../types/submit";
 
 export class NostrStore extends RamStore {
   private mode: RenderMode;
@@ -93,7 +93,7 @@ export class NostrStore extends RamStore {
   public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
     const match = (
       matchPostsToFilters(e, this.filters) ||
-      this.submittedEvents.has(eventId(e))
+      this.submittedEvents.get(eventId(e))?.state === SUBMIT_STATE_ADD
     );
     // if (!match) console.log("skip ", e.id, e);
     return match;
@@ -726,7 +726,8 @@ export class NostrStore extends RamStore {
         const existing = this.submittedEvents.get(submit.eventAddress);
         if (!existing || existing.event.created_at < submit.event.created_at) {
           this.submittedEvents.set(submit.eventAddress, submit);
-          newSubmitEvents.push(submit.eventAddress);
+          if (submit.state === SUBMIT_STATE_ADD)
+            newSubmitEvents.push(submit.eventAddress);
         }
         continue;
       }
