@@ -41,4 +41,5 @@ export interface Renderer {
   getSiteMap(): Promise<string[]>;
   isRss(path: string): boolean;
   hasRss(path: string): boolean;
+  isSsrOnly(path: string): boolean;
 }

@@ -799,6 +799,10 @@ export class NostrSiteRenderer implements Renderer {
     return !!this.router!.route(path).context.includes("rss");
   }
 
+  public isSsrOnly(path: string) {
+    return path.startsWith("/.well-known/");
+  }
+
   public prepareRelays(options?: any) {
     const relays = [
       ...this.settings!.contributor_relays,
