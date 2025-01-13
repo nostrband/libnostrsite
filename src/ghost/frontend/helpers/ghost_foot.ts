@@ -91,11 +91,15 @@ export default function ghost_foot(options: any) {
     if (relays.length > 10) relays.length = 10;
     console.log("nostr-login relays", relays, site);
 
+    // FIXME add follow npubs for njump
+
     foot.push(`
   <script async src="${JS_NOSTR_LOGIN}"
     data-perms="sign_event:1,sign_event:7,sign_event:3,sign_event:9734,sign_event:10003,sign_event:9802,nip04_encrypt,nip04_decrypt"
     data-start-screen="local-signup"
     data-signup-relays="${relays}"
+    data-signup-njump="true"
+    data-follow-npubs=""
   ></script>
   <script>
     (async () => {

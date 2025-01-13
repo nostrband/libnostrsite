@@ -1069,6 +1069,7 @@ export function createSiteFilters({
   };
 
   if (hashtags) {
+    // filter by site's include_tags, only filter if !include_all,
     if (!settings.include_all) {
       if (!settings.include_tags) hashtags = [];
       else
@@ -1123,4 +1124,3 @@ export function parseATag(a: string | null | undefined) {
     identifier: r.slice(2).join(":"),
   };
 }
-

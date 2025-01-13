@@ -38,8 +38,8 @@ export function isBlossomUrl(u: string) {
 
 export function findImeta(event: NostrEvent, u: string) {
   return event.tags
-  .filter((t) => t.length > 1 && t[0] === "imeta")
-  .find((t) => t.find((v) => v === `url ${u}`));
+    .filter((t) => t.length > 1 && t[0] === "imeta")
+    .find((t) => t.find((v) => v === `url ${u}`));
 }
 
 export function isImageUrl(u: string, event?: NostrEvent) {
@@ -147,11 +147,7 @@ export class PromiseQueue {
   }
 }
 
-export async function fetchRelays(
-  ndk: NDK,
-  pubkeys: string[],
-  maxRelaysPerPubkey: number = 10
-) {
+export function parseRelayEvents(events: Set<NDKEvent>) {
   const pubkeyRelays = new Map<
     string,
     {
@@ -160,76 +156,48 @@ export async function fetchRelays(
     }
   >();
 
-  // const writeRelays: string[] = [];
-  // const readRelays: string[] = [];
-
-  const parseRelays = (events: Set<NDKEvent>) => {
-    for (const e of events) {
-      const pr = pubkeyRelays.get(e.pubkey) || {
-        writeRelays: [],
-        readRelays: [],
+  for (const e of events) {
+    const pr = pubkeyRelays.get(e.pubkey) || {
+      writeRelays: [],
+      readRelays: [],
+    };
+    if (e.kind === KIND_RELAYS) {
+      const filter = (mark: string) => {
+        return e.tags
+          .filter(
+            (t) =>
+              t.length >= 2 && t[0] === "r" && (t.length === 2 || t[2] === mark)
+          )
+          .map((t) => t[1]);
       };
-      if (e.kind === KIND_RELAYS) {
-        const filter = (mark: string) => {
-          return e.tags
-            .filter(
-              (t) =>
-                t.length >= 2 &&
-                t[0] === "r" &&
-                (t.length === 2 || t[2] === mark)
-            )
-            .map((t) => t[1]);
-        };
-        pr.writeRelays.push(...filter("write"));
-        pr.readRelays.push(...filter("read"));
-      } else {
-        try {
-          const relays = JSON.parse(e.content);
-          for (const url in relays) {
-            if (relays[url].write) pr.writeRelays.push(url);
-            if (relays[url].read) pr.readRelays.push(url);
-          }
-        } catch {}
-      }
-      pubkeyRelays.set(e.pubkey, pr);
+      pr.writeRelays.push(...filter("write"));
+      pr.readRelays.push(...filter("read"));
+    } else {
+      try {
+        const relays = JSON.parse(e.content);
+        for (const url in relays) {
+          if (relays[url].write) pr.writeRelays.push(url);
+          if (relays[url].read) pr.readRelays.push(url);
+        }
+      } catch {}
     }
-  };
-
-  let events = await fetchEvents(
-    ndk,
-    {
-      // @ts-ignore
-      kinds: [KIND_CONTACTS, KIND_RELAYS],
-      authors: pubkeys,
-    },
-    OUTBOX_RELAYS,
-    2000
-  );
-  parseRelays(events);
-  console.log("relays", events, pubkeyRelays);
-  const emptyPubkeys = [...pubkeyRelays.entries()]
-    .map(([pubkey, relays]) => {
-      if (!relays.readRelays.length && !relays.writeRelays.length)
-        return pubkey;
-    })
-    .filter((p) => !!p) as string[];
-
-  if (emptyPubkeys.length) {
-    // all right let's add nostr.band and higher timeout
-    events = await fetchEvents(
-      ndk,
-      {
-        // @ts-ignore
-        kinds: [KIND_CONTACTS, KIND_RELAYS],
-        authors: emptyPubkeys,
-      },
-      [...FALLBACK_OUTBOX_RELAYS, ...OUTBOX_RELAYS],
-      5000
-    );
-    parseRelays(events);
+    pubkeyRelays.set(e.pubkey, pr);
   }
 
-  const prepare = (relays: string[]) => {
+  return pubkeyRelays;
+}
+
+export function prepareRelays(
+  pubkeyRelays: Map<
+    string,
+    {
+      writeRelays: string[];
+      readRelays: string[];
+    }
+  >,
+  maxRelaysPerPubkey: number
+) {
+  const prepare = (relays: string[], maxRelaysPerPubkey: number) => {
     // normalize
     const normal = relays
       // normalize urls
@@ -266,8 +234,8 @@ export async function fetchRelays(
 
   // sanitize and prioritize per pubkey
   for (const rs of pubkeyRelays.values()) {
-    rs.readRelays = prepare(rs.readRelays);
-    rs.writeRelays = prepare(rs.writeRelays);
+    rs.readRelays = prepare(rs.readRelays, maxRelaysPerPubkey);
+    rs.writeRelays = prepare(rs.writeRelays, maxRelaysPerPubkey);
 
     // NOTE: some people mistakenly mark all relays as write/read
     if (!rs.readRelays.length) rs.readRelays = rs.writeRelays;
@@ -282,6 +250,57 @@ export async function fetchRelays(
     read: [
       ...new Set([...pubkeyRelays.values()].map((pr) => pr.readRelays).flat()),
     ],
+  };
+}
+
+export async function fetchRelays(
+  ndk: NDK,
+  pubkeys: string[],
+  maxRelaysPerPubkey: number = 10
+) {
+  const events = await fetchEvents(
+    ndk,
+    {
+      // @ts-ignore
+      kinds: [KIND_CONTACTS, KIND_RELAYS],
+      authors: pubkeys,
+    },
+    OUTBOX_RELAYS,
+    2000
+  );
+  const pubkeyRelays = parseRelayEvents(events);
+
+  console.log("relays", events, pubkeyRelays);
+  const emptyPubkeys = [...pubkeyRelays.entries()]
+    .map(([pubkey, relays]) => {
+      if (!relays.readRelays.length && !relays.writeRelays.length)
+        return pubkey;
+    })
+    .filter((p) => !!p) as string[];
+
+  if (emptyPubkeys.length) {
+    // all right let's add nostr.band and higher timeout
+    const moreEvents = await fetchEvents(
+      ndk,
+      {
+        // @ts-ignore
+        kinds: [KIND_CONTACTS, KIND_RELAYS],
+        authors: emptyPubkeys,
+      },
+      [...FALLBACK_OUTBOX_RELAYS, ...OUTBOX_RELAYS],
+      5000
+    );
+    for (const e of [...moreEvents]) events.add(e);
+
+    const morePubkeyRelays = parseRelayEvents(events);
+    for (const [p, rs] of morePubkeyRelays.entries()) pubkeyRelays.set(p, rs);
+  }
+
+  const relays = prepareRelays(pubkeyRelays, maxRelaysPerPubkey);
+  return {
+    ...relays,
+    // return all events too to let client cache them
+    events: [...events],
   };
 }
 
@@ -486,7 +505,6 @@ export async function fetchBlossom(url: string) {
 
   for (const su of urls) {
     try {
-
       const controller = new AbortController();
       const signal = controller.signal;
       const to = setTimeout(() => {
@@ -507,15 +525,25 @@ export async function fetchBlossom(url: string) {
   throw new Error("Failed to fetch asset " + url);
 }
 
-export async function fetchSiteFile(ndk: NDK, naddr: string, name: string, relays: string[]) {
+export async function fetchSiteFile(
+  ndk: NDK,
+  naddr: string,
+  name: string,
+  relays: string[]
+) {
   const addr = parseAddr(naddr);
   const s_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
   const d_tag = `${name}:${s_tag}`;
-  return fetchEvent(ndk, {
-    "#d": [d_tag],
-    "#s": [s_tag],
-    authors: [addr.pubkey],
-    // @ts-ignore
-    kinds: [KIND_SITE_FILE],
-  }, relays, 1000);
+  return fetchEvent(
+    ndk,
+    {
+      "#d": [d_tag],
+      "#s": [s_tag],
+      authors: [addr.pubkey],
+      // @ts-ignore
+      kinds: [KIND_SITE_FILE],
+    },
+    relays,
+    1000
+  );
 }

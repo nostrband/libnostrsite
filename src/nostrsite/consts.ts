@@ -51,10 +51,10 @@ export const JS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.js";
 export const CSS_VENOBOX =
   "https://cdn.jsdelivr.net/npm/venobox@2.1.8/dist/venobox.min.css";
-export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.6.1.js";
+export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.6.2.js";
 export const JS_ZAPTHREADS_PLUGIN = "https://cdn.npubpro.com/nostr-site-zapthreads.1.0.2.js";
 export const JS_NOSTR_LOGIN =
-  "https://unpkg.com/nostr-login@1.6.14/dist/unpkg.js";
+  "https://unpkg.com/nostr-login@1.7.1/dist/unpkg.js";
 export const JS_SEARCH =
   "https://unpkg.com/nostr-site-search@1.0.12/dist/index.js";
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.2.js";

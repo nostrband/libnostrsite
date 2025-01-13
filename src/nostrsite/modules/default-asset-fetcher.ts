@@ -48,7 +48,7 @@ export class DefaultAssetFetcher implements AssetFetcher {
     // cut 2 slashes and query string
     const path = file.substring(dir.length + 2).split("?")[0];
     const theme = this.themes.find((t) => t.id === dir);
-    console.debug("fetch from theme", dir, path, file, theme);
+    // console.debug("fetch from theme", dir, path, file, theme);
 
     if (theme) {
       if (theme.local) return file;

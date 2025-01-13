@@ -803,6 +803,19 @@ export class NostrSiteRenderer implements Renderer {
     return path.startsWith("/.well-known/");
   }
 
+  public async normalizePath(path: string) {
+    const route = this.router!.route(path);
+    if (!route.context.includes("post")) return path;
+
+    const slugId = route.param;
+    if (!slugId) return path;
+
+    const object = await this.store!.get(slugId, "posts");
+    if (!object) return path;
+
+    return (object as Post).url;
+  }
+
   public prepareRelays(options?: any) {
     const relays = [
       ...this.settings!.contributor_relays,

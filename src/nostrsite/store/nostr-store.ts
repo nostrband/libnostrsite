@@ -10,11 +10,13 @@ import { Site } from "../types/site";
 import { RamStore } from "./ram-store";
 import {
   DEFAULT_MAX_LIMIT,
+  KIND_CONTACTS,
   KIND_LONG_NOTE,
   KIND_MUSIC,
   KIND_NOTE,
   KIND_PINNED_TO_SITE,
   KIND_PROFILE,
+  KIND_RELAYS,
   KIND_SITE,
   KIND_SITE_SUBMIT,
   MAX_OBJECTS_IIFE,
@@ -41,6 +43,8 @@ import {
   fetchEvent,
   fetchEvents,
   fetchRelays,
+  parseRelayEvents,
+  prepareRelays,
   profileId,
   tags,
   tv,
@@ -66,7 +70,6 @@ export class NostrStore extends RamStore {
   private fetchedRelays?: boolean;
   private getUrlCb?: (o: StoreObject) => string;
   private fetchContextDone = new Set<string>();
-  private pinsFetched = false;
   private submittedEvents = new Map<string, Submit>();
 
   constructor(
@@ -91,10 +94,9 @@ export class NostrStore extends RamStore {
   }
 
   public matchObject(e: DbEvent | NostrEvent | NDKEvent) {
-    const match = (
+    const match =
       matchPostsToFilters(e, this.filters) ||
-      this.submittedEvents.get(eventId(e))?.state === SUBMIT_STATE_ADD
-    );
+      this.submittedEvents.get(eventId(e))?.state === SUBMIT_STATE_ADD;
     // if (!match) console.log("skip ", e.id, e);
     return match;
   }
@@ -158,15 +160,8 @@ export class NostrStore extends RamStore {
 
   private async fetchRelays() {
     // already known?
-    if (
-      this.settings.contributor_relays.length > 0 ||
-      this.fetchedRelays ||
-      this.isOffline()
-    )
+    if (this.settings.contributor_relays.length > 0 || this.fetchedRelays)
       return;
-
-    // one try only
-    this.fetchedRelays = true;
 
     // NOTE: we expect fetchRelays to provide a good small set
     // of relays for each contributor
@@ -178,24 +173,65 @@ export class NostrStore extends RamStore {
         break;
     }
 
-    // fetch relays for contributors
-    const { write, read } = await fetchRelays(
-      this.ndk,
-      this.settings.contributor_pubkeys,
-      maxRelays
-    );
+    // look at cache first
+    if (this.useCache()) {
+      const cached = [
+        ...(await dbi.listKindEvents(KIND_CONTACTS, 100)),
+        ...(await dbi.listKindEvents(KIND_RELAYS, 100)),
+      ].filter((e) => this.settings.contributor_pubkeys.includes(e.pubkey));
+      console.log("cached outbox relay events", cached);
 
-    this.settings.contributor_relays = write;
-    this.settings.contributor_inbox_relays = read;
+      const pubkeyRelays = parseRelayEvents(
+        new Set(cached.map((e) => new NDKEvent(this.ndk, e)))
+      );
+      const { read, write } = prepareRelays(pubkeyRelays, maxRelays);
 
-    console.log("contributor outbox relays", this.settings.contributor_relays);
+      this.settings.contributor_relays = write;
+      this.settings.contributor_inbox_relays = read;
+
+      console.log(
+        "contributor cached outbox relays",
+        this.settings.contributor_relays
+      );
+    }
+
+    const fetch = async () => {
+      // skip if we're offline
+      if (this.isOffline()) return;
+
+      // one try only
+      if (this.fetchedRelays) return;
+      this.fetchedRelays = true;
+
+      // fetch relays for contributors
+      const { write, read, events } = await fetchRelays(
+        this.ndk,
+        this.settings.contributor_pubkeys,
+        maxRelays
+      );
+
+      await this.storeEvents(events);
+
+      this.settings.contributor_relays = write;
+      this.settings.contributor_inbox_relays = read;
+
+      console.log(
+        "contributor outbox relays",
+        this.settings.contributor_relays
+      );
+    };
+
+    // if we've got some from cache then do background
+    // update for relay list event, otherwise
+    // block until relays are fetched
+    if (this.settings.contributor_relays.length) {
+      // tab shouldn't do this
+      if (this.mode !== "tab") fetch();
+    } else await fetch();
   }
 
   private async fetchPins() {
     if (!this.pins.length) return;
-    if (this.pinsFetched) return;
-
-    this.pinsFetched = true;
 
     const pins = this.pins.filter(
       (p) => !this.posts.find((post) => post.id === p)
@@ -309,14 +345,13 @@ export class NostrStore extends RamStore {
     const since = await this.loadFromDb(this.maxObjects * 10);
     // fetch since latest in db until now
     await this.fetchAllObjects(this.maxObjects, { since });
-
-    await this.fetchPins();
+    await this.fetchPinList();
   }
 
   private async loadPreview() {
     // fetch the latest stuff from relays
     await this.fetchAllObjects(this.maxObjects, {});
-    await this.fetchPins();
+    await this.fetchPinList();
   }
 
   private async getRelays() {
@@ -361,6 +396,12 @@ export class NostrStore extends RamStore {
 
     filters = filters || this.createTagFilters({});
     submitFilters = submitFilters || this.createSubmitFilters({});
+    console.log(
+      "fetchAllObjects filters",
+      filters,
+      "submitFilters",
+      submitFilters
+    );
 
     timeout =
       timeout ||
@@ -385,7 +426,8 @@ export class NostrStore extends RamStore {
     };
 
     let promises = [];
-    if (this.settings.include_all || !!this.settings.include_tags?.length) {
+    // if (this.settings.include_all || !!this.settings.include_tags?.length) {
+    if (filters?.length) {
       promises.push(
         scanRelays(this.ndk, filters, relays, max, {
           matcher: (e) => this.matchObject(e),
@@ -399,16 +441,18 @@ export class NostrStore extends RamStore {
     }
 
     // fetch submit events
-    promises.push(
-      scanRelays(this.ndk, submitFilters, relays, max, {
-        matcher: () => true,
-        onBatch,
-        since,
-        until,
-        timeout,
-        threads,
-      })
-    );
+    if (submitFilters.length) {
+      promises.push(
+        scanRelays(this.ndk, submitFilters, relays, max, {
+          matcher: () => true,
+          onBatch,
+          since,
+          until,
+          timeout,
+          threads,
+        })
+      );
+    }
 
     await Promise.all(promises);
 
@@ -456,22 +500,28 @@ export class NostrStore extends RamStore {
       });
     }
 
+    await this.fetchPinList();
+
     // sync forward from 'since'
     this.subscribeForNewEvents(now);
   }
 
   private async loadSsr() {
     await this.fetchAllObjects(this.maxObjects, {});
-    await this.fetchPins();
+    await this.fetchPinList();
   }
 
   private async loadTab() {
     // load everything from db
     await this.loadFromDb(this.maxObjects);
     // first page load? fetch some from network
-    if (!this.posts.length) await this.fetchAllObjects(50, {});
-    // ensure relays
-    else await this.fetchRelays();
+    if (!this.posts.length) {
+      await this.fetchAllObjects(50, {});
+      await this.fetchPinList();
+    } else {
+      // ensure relays
+      await this.fetchRelays();
+    }
   }
 
   private getMaxObjects() {
@@ -491,7 +541,6 @@ export class NostrStore extends RamStore {
 
   private async processBatch() {
     await this.fetchContributors();
-    await this.fetchPinList();
     await this.assignAuthors();
     await this.postProcess();
 
@@ -859,7 +908,7 @@ export class NostrStore extends RamStore {
         }
       }
     }
-    if (event) this.parsePins([event]);
+    if (event) await this.parsePins([event]);
   }
 
   private async assignAuthors() {
@@ -915,7 +964,9 @@ export class NostrStore extends RamStore {
         if (submit) relayHints.push(submit.relay);
       }
 
-      const newEvents = await fetchByIds(this.ndk, ids, relayHints);
+      const newEvents = await fetchByIds(this.ndk, ids, relayHints, {
+        timeout: 5000,
+      });
 
       await this.storeEvents([...newEvents]);
 
@@ -1083,7 +1134,7 @@ export class NostrStore extends RamStore {
     }
   }
 
-  private parsePins(events: NDKEvent[]) {
+  private async parsePins(events: NDKEvent[]) {
     // reset
     this.pins.length = 0;
 
@@ -1092,6 +1143,9 @@ export class NostrStore extends RamStore {
       console.log("pins by", e.pubkey, pins);
       this.pins.push(...pins);
     }
+    console.log("new pins", this.pins);
+
+    await this.fetchPins();
   }
 
   private createTagFilters({
@@ -1176,7 +1230,7 @@ export class NostrStore extends RamStore {
     sub.on("event", async (event) => {
       console.log("new pins list", event);
       await this.storeEvents([event]);
-      this.parsePins([event]);
+      await this.parsePins([event]);
     });
 
     sub.start();
@@ -1191,8 +1245,10 @@ export class NostrStore extends RamStore {
     if (this.isOffline()) return until;
 
     const filters = this.createTagFilters({ since, until });
+    const submitFilters = this.createSubmitFilters({ since, until });
+    filters.push(...submitFilters);
     if (!filters.length) {
-      console.warn("Empty filters for 'include' tags");
+      console.warn("Empty filters at fetchByFilter");
       return until;
     }
 

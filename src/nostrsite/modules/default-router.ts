@@ -33,7 +33,7 @@ export class DefaultRouter implements Router {
 
     const route: Route = {
       path,
-      // ensure trailing slash
+      // cut pagination, ensure trailing slash
       pathBase: path.includes("/page/") ? path.split("page/")[0] : path,
       pathHtml: path,
       context: [],
