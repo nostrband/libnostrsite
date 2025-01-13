@@ -1137,11 +1137,15 @@ export class NostrStore extends RamStore {
   private async parsePins(events: NDKEvent[]) {
     // reset
     this.pins.length = 0;
+    for (const p of this.posts) p.featured = false;
 
     for (const e of events) {
       const pins = this.parser.parsePins(e);
       console.log("pins by", e.pubkey, pins);
       this.pins.push(...pins);
+
+      const post = this.posts.find((p) => pins.includes(p.id));
+      if (post) post.featured = true;
     }
     console.log("new pins", this.pins);
 
