@@ -774,9 +774,14 @@ export class NostrStore extends RamStore {
 
         const existing = this.submittedEvents.get(submit.eventAddress);
         if (!existing || existing.event.created_at < submit.event.created_at) {
-          this.submittedEvents.set(submit.eventAddress, submit);
-          if (submit.state === SUBMIT_STATE_ADD)
+          if (submit.state === SUBMIT_STATE_ADD) {
+            this.submittedEvents.set(submit.eventAddress, submit);
             newSubmitEvents.push(submit.eventAddress);
+          } else {
+            this.submittedEvents.delete(submit.eventAddress);
+            const post = this.posts.find((p) => p.id === submit.eventAddress);
+            if (post && !this.matchObject(post.event)) this.removePost(post);
+          }
         }
         continue;
       }
@@ -1315,15 +1320,15 @@ export class NostrStore extends RamStore {
 
       const onEvent = async (e: NDKEvent) => {
         if (!newUntil || e.created_at! < newUntil) newUntil = e.created_at;
+        if (!this.matchObject(e) && e.kind !== KIND_SITE_SUBMIT) return;
+
         if (eose && subscribe) {
           console.log("new event", e);
-          if (this.matchObject(e)) {
-            await this.storeEvents([e]);
-            await this.parseEvents([e]);
-            await this.processBatch();
-          }
+          await this.storeEvents([e]);
+          await this.parseEvents([e]);
+          await this.processBatch();
         } else {
-          if (this.matchObject(e)) events.push(e);
+          events.push(e);
         }
       };
 

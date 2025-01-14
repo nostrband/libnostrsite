@@ -839,7 +839,7 @@ export async function fetchByIds(
   const events: NDKEvent[] = [];
 
   // split into batches
-  const queue = [...ids]
+  const queue = [...ids];
   while (queue.length) {
     const batch = queue.splice(0, Math.min(batchSize, queue.length));
 
@@ -915,7 +915,13 @@ export function createSiteSubmitFilters({
   authors?: string[];
 }) {
   // all pubkeys by default
-  authors = authors || settings.contributor_pubkeys;
+  authors = authors || [
+    ...new Set([
+      ...settings.contributor_pubkeys,
+      // NOTE: this is for delegated mode
+      settings.event.pubkey,
+    ]),
+  ];
   const addr = parseAddr(settings.naddr);
   const s_tag = `${KIND_SITE}:${addr.pubkey}:${addr.identifier}`;
 
@@ -935,7 +941,7 @@ export function createSiteSubmitFilters({
         // @ts-ignore
         kinds: [KIND_SITE_SUBMIT],
         "#s": [s_tag],
-        "authors": authors,
+        authors: authors,
         "#k": ["" + kind],
         limit,
       };
