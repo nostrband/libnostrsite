@@ -5,6 +5,8 @@ export const SUBMIT_STATE_REMOVE = 'remove';
 
 export interface Submit {
   event: NostrEvent;
+  // "u" tag or event.pubkey
+  authorPubkey: string;
 
   // target
   eventAddress: string;

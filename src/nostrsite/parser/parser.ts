@@ -307,6 +307,7 @@ export class NostrParser {
       event: e.rawEvent(),
       eventAddress: "",
       relay: "",
+      authorPubkey: tv(e, "u") || e.pubkey,
       pubkey: tv(e, "p") || "",
       kind: parseInt(tv(e, "k") || "0"),
       hashtags: tags(e, "t", 2).map((t) => t[1]),
