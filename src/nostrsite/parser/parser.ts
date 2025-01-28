@@ -8,6 +8,7 @@ import { Marked, marked } from "marked";
 import {
   KIND_LONG_NOTE,
   KIND_NOTE,
+  KIND_OLAS,
   KIND_PACKAGE,
   KIND_SITE,
   SUPPORTED_KINDS,
@@ -284,7 +285,8 @@ export class NostrParser {
       ? await dbi.getCache(packageJsonUrl)
       : undefined;
     const packageJson =
-      cachedPackageJson || (await fetchBlossom(packageJsonUrl).then((r) => r.json()));
+      cachedPackageJson ||
+      (await fetchBlossom(packageJsonUrl).then((r) => r.json()));
     if (this.useCache && !cachedPackageJson && packageJson) {
       await dbi.putCache(packageJsonUrl, packageJson);
     }
@@ -311,7 +313,7 @@ export class NostrParser {
       pubkey: tv(e, "p") || "",
       kind: parseInt(tv(e, "k") || "0"),
       hashtags: tags(e, "t", 2).map((t) => t[1]),
-      state: tv(e, 'state') || SUBMIT_STATE_ADD,
+      state: tv(e, "state") || SUBMIT_STATE_ADD,
     };
     if (!SUPPORTED_KINDS.includes(submit.kind) || !submit.pubkey)
       return undefined;
@@ -344,6 +346,7 @@ export class NostrParser {
   public async parseEvent(e: NDKEvent, store?: Store) {
     switch (e.kind) {
       case KIND_NOTE:
+      case KIND_OLAS:
         return await this.parseNote(e, store);
       default:
         return await this.parseEventDefault(e);
@@ -458,7 +461,7 @@ export class NostrParser {
   // }
 
   public async parseNote(e: NDKEvent, store?: Store) {
-    if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
+    if (e.kind !== KIND_NOTE && e.kind !== KIND_OLAS) throw new Error("Bad kind: " + e.kind);
 
     const post = this.parseEventDefault(e);
 

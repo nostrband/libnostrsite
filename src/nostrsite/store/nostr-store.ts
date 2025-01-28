@@ -765,7 +765,7 @@ export class NostrStore extends RamStore {
     // now when linked events are cached we can
     // parse events and use linked events to
     // format content
-    const newSubmitEvents: string[] = [];
+    let newSubmitEvents: string[] = [];
     for (const e of events) {
       // submit events
       if (e.kind === KIND_SITE_SUBMIT) {
@@ -774,11 +774,10 @@ export class NostrStore extends RamStore {
 
         const existing = this.submittedEvents.get(submit.eventAddress);
         if (!existing || existing.event.created_at < submit.event.created_at) {
+          this.submittedEvents.set(submit.eventAddress, submit);
           if (submit.state === SUBMIT_STATE_ADD) {
-            this.submittedEvents.set(submit.eventAddress, submit);
             newSubmitEvents.push(submit.eventAddress);
           } else {
-            this.submittedEvents.delete(submit.eventAddress);
             const post = this.posts.find((p) => p.id === submit.eventAddress);
             if (post && !this.matchObject(post.event)) this.removePost(post);
           }
@@ -947,6 +946,9 @@ export class NostrStore extends RamStore {
   protected async fetchSubmitted(ids: string[]) {
     if (!ids.length) return;
 
+    ids = ids.filter(
+      (id) => this.submittedEvents.get(id)?.state === SUBMIT_STATE_ADD
+    );
     console.log("fetchSubmitted", ids);
 
     // check cache first

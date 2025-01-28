@@ -16,6 +16,7 @@ import {
   JS_ZAPTHREADS,
   JS_ZAPTHREADS_PLUGIN,
 } from "../../..";
+import { nip19 } from "nostr-tools";
 
 // We use the name ghost_foot to match the helper for consistency:
 export default function ghost_foot(options: any) {
@@ -92,14 +93,16 @@ export default function ghost_foot(options: any) {
     console.log("nostr-login relays", relays, site);
 
     // FIXME add follow npubs for njump
+    const followPubkeys = [...new Set([site.admin_pubkey, ...site.contributor_pubkeys])];
+    const followNpubs = followPubkeys.map(p => nip19.npubEncode(p)).join(",");
 
     foot.push(`
   <script async src="${JS_NOSTR_LOGIN}"
     data-perms="sign_event:1,sign_event:7,sign_event:3,sign_event:9734,sign_event:10003,sign_event:9802,nip04_encrypt,nip04_decrypt"
     data-start-screen="local-signup"
     data-signup-relays="${relays}"
-    data-signup-njump="true"
-    data-follow-npubs=""
+    data-signup-njump="${site.config.get("nostr_login.signup_start_njump")}"
+    data-follow-npubs="${followNpubs}"
   ></script>
   <script>
     (async () => {

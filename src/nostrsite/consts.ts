@@ -8,10 +8,11 @@ export const KIND_SITE_SUBMIT = 30517;
 export const KIND_SITE_FILE = 30518;
 export const KIND_PACKAGE = 1036;
 export const KIND_NOTE = 1;
+export const KIND_OLAS = 20;
 export const KIND_LONG_NOTE = 30023;
 export const KIND_LIVE_EVENT = 30311;
 export const KIND_MUSIC = 31337;
-export const SUPPORTED_KINDS = [KIND_NOTE, KIND_LONG_NOTE, KIND_MUSIC];
+export const SUPPORTED_KINDS = [KIND_NOTE, KIND_OLAS, KIND_LONG_NOTE, KIND_MUSIC];
 export const JQUERY = "https://code.jquery.com/jquery-3.5.1.min.js";
 export const DEFAULT_MAX_LIMIT = 20;
 
@@ -54,7 +55,7 @@ export const CSS_VENOBOX =
 export const JS_ZAPTHREADS = "https://cdn.npubpro.com/zapthreads.iife.0.6.2.js";
 export const JS_ZAPTHREADS_PLUGIN = "https://cdn.npubpro.com/nostr-site-zapthreads.1.0.2.js";
 export const JS_NOSTR_LOGIN =
-  "https://unpkg.com/nostr-login@1.7.1/dist/unpkg.js";
+  "https://unpkg.com/nostr-login@1.7.5/dist/unpkg.js";
 export const JS_SEARCH =
   "https://unpkg.com/nostr-site-search@1.0.12/dist/index.js";
 export const JS_ZAP = "https://cdn.npubpro.com/nostr-zap.0.22.2.js";
