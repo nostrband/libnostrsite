@@ -11,6 +11,8 @@ import {
   KIND_OLAS,
   KIND_PACKAGE,
   KIND_SITE,
+  KIND_VIDEO_HORIZONTAL,
+  KIND_VIDEO_VERTICAL,
   SUPPORTED_KINDS,
 } from "../consts";
 import { Profile } from "../types/profile";
@@ -346,8 +348,12 @@ export class NostrParser {
   public async parseEvent(e: NDKEvent, store?: Store) {
     switch (e.kind) {
       case KIND_NOTE:
-      case KIND_OLAS:
         return await this.parseNote(e, store);
+      case KIND_OLAS:
+        return await this.parseOlas(e, store);
+      case KIND_VIDEO_HORIZONTAL:
+      case KIND_VIDEO_VERTICAL:
+        return await this.parseVideo(e);
       default:
         return await this.parseEventDefault(e);
       // case KIND_MUSIC:
@@ -461,7 +467,7 @@ export class NostrParser {
   // }
 
   public async parseNote(e: NDKEvent, store?: Store) {
-    if (e.kind !== KIND_NOTE && e.kind !== KIND_OLAS) throw new Error("Bad kind: " + e.kind);
+    if (e.kind !== KIND_NOTE) throw new Error("Bad kind: " + e.kind);
 
     const post = this.parseEventDefault(e);
 
@@ -527,6 +533,70 @@ export class NostrParser {
     }
     if (!post.title || post.title !== headline) post.title += "…";
     if (post.excerpt && post.excerpt !== textContent) post.excerpt += "…";
+
+    return post;
+  }
+
+  public async parseOlas(e: NDKEvent, store?: Store) {
+    if (e.kind !== KIND_OLAS) throw new Error("Bad kind: " + e.kind);
+
+    const post = this.parseEventDefault(e);
+
+    // append the image urls to the content, otherwise we won't display it
+    let content = e.content;
+    for (const url of post.images) {
+      content = content + "\n" + url;
+    }
+
+    // see notes in parseNote
+    post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
+
+    // now back to text from markdown, prepare to make title/excerpt
+    let textContent = (await new Marked().use(markedPlaintify()).parse(content))
+      // https://github.com/markedjs/marked/discussions/1737#discussioncomment-168391
+      .replace(/&amp;/g, "&")
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"');
+
+    // replace nostr npub/nprofile links in textContent
+    // with @username texts
+    if (store)
+      textContent = await this.replaceNostrProfiles(
+        store,
+        post.nostrLinks,
+        textContent,
+        true
+      );
+
+    // cut nostr links if any are left after @username substitution
+    for (const l of post.nostrLinks) textContent = textContent.replace(l, "");
+
+    // take the first line
+    const headline = textContent.trim().split("\n")[0];
+    try {
+      post.excerpt = downsize(textContent, { words: 50 });
+      post.title = downsize(headline, { words: 6 });
+    } catch (e) {
+      console.error("downsize failed", e);
+    }
+    if (!post.title || post.title !== headline) post.title += "…";
+    if (post.excerpt && post.excerpt !== textContent) post.excerpt += "…";
+
+    return post;
+  }
+
+  public async parseVideo(e: NDKEvent) {
+    if (e.kind !== KIND_VIDEO_VERTICAL && e.kind !== KIND_VIDEO_HORIZONTAL)
+      throw new Error("Bad kind: " + e.kind);
+
+    const post = this.parseEventDefault(e);
+
+    // append one video url to the content, otherwise we won't display it
+    let content = e.content;
+    if (post.videos.length) content = content + "\n" + post.videos[0];
+
+    // see notes in parseNote
+    post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
 
     return post;
   }
