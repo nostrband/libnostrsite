@@ -9,6 +9,7 @@ export const KIND_SITE_FILE = 30518;
 export const KIND_PACKAGE = 1036;
 export const KIND_NOTE = 1;
 export const KIND_OLAS = 20;
+export const KIND_FILE_METADATA = 1063;
 export const KIND_LONG_NOTE = 30023;
 export const KIND_LIVE_EVENT = 30311;
 export const KIND_VIDEO_HORIZONTAL = 34235;
@@ -17,6 +18,7 @@ export const KIND_MUSIC = 31337;
 export const SUPPORTED_KINDS = [
   KIND_NOTE,
   KIND_OLAS,
+  KIND_FILE_METADATA,
   KIND_LONG_NOTE,
   KIND_MUSIC,
   KIND_VIDEO_HORIZONTAL,
@@ -41,6 +43,7 @@ export const OUTBOX_RELAYS = [
 ];
 
 export const FALLBACK_OUTBOX_RELAYS = ["wss://relay.nostr.band/all"];
+export const FALLBACK_RELAYS = ["wss://relay.nostr.band/all"];
 
 export const SITE_RELAY = "wss://relay.npubpro.com/";
 

@@ -6,6 +6,7 @@ import { Post } from "../types/post";
 import { Marked, marked } from "marked";
 // import moment from "moment-timezone";
 import {
+  KIND_FILE_METADATA,
   KIND_LONG_NOTE,
   KIND_NOTE,
   KIND_OLAS,
@@ -351,6 +352,8 @@ export class NostrParser {
         return await this.parseNote(e, store);
       case KIND_OLAS:
         return await this.parseOlas(e, store);
+      case KIND_FILE_METADATA:
+        return await this.parseFile(e);
       case KIND_VIDEO_HORIZONTAL:
       case KIND_VIDEO_VERTICAL:
         return await this.parseVideo(e);
@@ -544,9 +547,7 @@ export class NostrParser {
 
     // append the image urls to the content, otherwise we won't display it
     let content = e.content;
-    for (const url of post.images) {
-      content = content + "\n" + url;
-    }
+    for (const url of post.images) content = this.appendLine(content, url);
 
     // see notes in parseNote
     post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
@@ -585,6 +586,11 @@ export class NostrParser {
     return post;
   }
 
+  private appendLine(s: string, line: string) {
+    if (s) s += "\n";
+    return s + line;
+  }
+
   public async parseVideo(e: NDKEvent) {
     if (e.kind !== KIND_VIDEO_VERTICAL && e.kind !== KIND_VIDEO_HORIZONTAL)
       throw new Error("Bad kind: " + e.kind);
@@ -593,7 +599,22 @@ export class NostrParser {
 
     // append one video url to the content, otherwise we won't display it
     let content = e.content;
-    if (post.videos.length) content = content + "\n" + post.videos[0];
+    if (post.videos.length) content = this.appendLine(content, post.videos[0]);
+
+    // see notes in parseNote
+    post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
+
+    return post;
+  }
+
+  public async parseFile(e: NDKEvent) {
+    if (e.kind !== KIND_FILE_METADATA) throw new Error("Bad kind: " + e.kind);
+
+    const post = this.parseEventDefault(e);
+
+    // append the url to the content, otherwise we won't display it
+    let content = e.content;
+    if (post.links.length) content = this.appendLine(content, post.links[0]);
 
     // see notes in parseNote
     post.markdown = content.replace(new RegExp("\n", "gi"), "<br>");
@@ -952,6 +973,11 @@ export class NostrParser {
       .map((u) => u?.split("url ")[1].trim() as string)
       .filter((u) => !!u);
     links.push(...tagUrls);
+
+    if (e.kind === KIND_FILE_METADATA) {
+      const url = tv(e, "url");
+      if (url) links.push(url);
+    }
 
     return [...new Set(links)];
   }

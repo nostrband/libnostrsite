@@ -8,8 +8,10 @@ import {
   BLACKLISTED_RELAYS,
   BLOSSOM_FALLBACKS,
   FALLBACK_OUTBOX_RELAYS,
+  FALLBACK_RELAYS,
   GOOD_RELAYS,
   KIND_CONTACTS,
+  KIND_FILE_METADATA,
   KIND_RELAYS,
   KIND_SITE,
   KIND_SITE_FILE,
@@ -17,6 +19,7 @@ import {
   Site,
   StoreObject,
   eventId,
+  tv,
 } from ".";
 import { isPost, isTag, isUser } from "../ghost/frontend/utils/checks";
 import { isEqual, toNumber } from "lodash-es";
@@ -42,6 +45,16 @@ export function findImeta(event: NostrEvent, u: string) {
     .find((t) => t.find((v) => v === `url ${u}`));
 }
 
+export function findMimeType(event: NostrEvent, u: string) {
+  if (event.kind === KIND_FILE_METADATA) {
+    return tv(event, "m");
+  } else {
+    return findImeta(event, u)
+      ?.find((v) => v.startsWith("m "))
+      ?.slice(2);
+  }
+}
+
 export function isImageUrl(u: string, event?: NostrEvent) {
   try {
     const url = new URL(u);
@@ -60,8 +73,8 @@ export function isImageUrl(u: string, event?: NostrEvent) {
 
     // no '.' in the last part of path?
     if (ext?.includes("/") && event) {
-      const imeta = findImeta(event, u);
-      return imeta && imeta.find((v) => v.startsWith("m image/"));
+      const mime = findMimeType(event, u);
+      return mime && mime.startsWith("image/");
     }
   } catch {}
   return false;
@@ -83,8 +96,8 @@ export function isVideoUrl(u: string, event?: NostrEvent) {
     }
 
     if (ext?.includes("/") && event) {
-      const imeta = findImeta(event, u);
-      return imeta && imeta.find((v) => v.startsWith("m video/"));
+      const mime = findMimeType(event, u);
+      return mime && mime.startsWith("video/");
     }
   } catch {}
   return false;
@@ -106,8 +119,8 @@ export function isAudioUrl(u: string, event?: NostrEvent) {
     }
 
     if (ext?.includes("/") && event) {
-      const imeta = findImeta(event, u);
-      return imeta && imeta.find((v) => v.startsWith("m audio/"));
+      const mime = findMimeType(event, u);
+      return mime && mime.startsWith("audio/");
     }
   } catch {}
   return false;
@@ -195,7 +208,8 @@ export function prepareRelays(
       readRelays: string[];
     }
   >,
-  maxRelaysPerPubkey: number
+  maxRelaysPerPubkey: number,
+  addFallback = false
 ) {
   const prepare = (relays: string[], maxRelaysPerPubkey: number) => {
     // normalize
@@ -231,6 +245,8 @@ export function prepareRelays(
 
     if (good.length > maxRelaysPerPubkey) good.length = maxRelaysPerPubkey;
 
+    if (addFallback) good.push(...FALLBACK_RELAYS);
+
     return good;
   };
 
@@ -258,7 +274,8 @@ export function prepareRelays(
 export async function fetchRelays(
   ndk: NDK,
   pubkeys: string[],
-  maxRelaysPerPubkey: number = 10
+  maxRelaysPerPubkey: number = 10,
+  addFallback = false
 ) {
   const events = await fetchEvents(
     ndk,
@@ -298,7 +315,7 @@ export async function fetchRelays(
     for (const [p, rs] of morePubkeyRelays.entries()) pubkeyRelays.set(p, rs);
   }
 
-  const relays = prepareRelays(pubkeyRelays, maxRelaysPerPubkey);
+  const relays = prepareRelays(pubkeyRelays, maxRelaysPerPubkey, addFallback);
   return {
     ...relays,
     // return all events too to let client cache them

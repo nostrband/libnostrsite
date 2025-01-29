@@ -173,6 +173,17 @@ export class NostrStore extends RamStore {
         break;
     }
 
+    // it's important to have best coverage on:
+    // - ssr: some relays block our server so we have to compensate
+    // - preview: rarely happen so won't overload
+    let addFallback = false;
+    switch (this.mode) {
+      case "preview":
+      case "ssr":
+        addFallback = true;
+        break;
+    }
+
     // look at cache first
     if (this.useCache()) {
       const cached = [
@@ -184,7 +195,11 @@ export class NostrStore extends RamStore {
       const pubkeyRelays = parseRelayEvents(
         new Set(cached.map((e) => new NDKEvent(this.ndk, e)))
       );
-      const { read, write } = prepareRelays(pubkeyRelays, maxRelays);
+      const { read, write } = prepareRelays(
+        pubkeyRelays,
+        maxRelays,
+        addFallback
+      );
 
       this.settings.contributor_relays = write;
       this.settings.contributor_inbox_relays = read;
@@ -207,7 +222,8 @@ export class NostrStore extends RamStore {
       const { write, read, events } = await fetchRelays(
         this.ndk,
         this.settings.contributor_pubkeys,
-        maxRelays
+        maxRelays,
+        addFallback
       );
 
       await this.storeEvents(events);
