@@ -974,7 +974,11 @@ export class NostrParser {
       .filter((u) => !!u);
     links.push(...tagUrls);
 
-    if (e.kind === KIND_FILE_METADATA) {
+    if (
+      e.kind === KIND_FILE_METADATA ||
+      e.kind === KIND_VIDEO_HORIZONTAL ||
+      e.kind === KIND_VIDEO_VERTICAL
+    ) {
       const url = tv(e, "url");
       if (url) links.push(url);
     }

@@ -53,6 +53,17 @@ export function parseAddr(naddr: string): SiteAddr {
   };
 }
 
+export function parseNaddr(naddr: string) {
+  if (!naddr) return undefined;
+  try {
+    const { type, data } = nip19.decode(naddr);
+    if (type === "naddr") return data;
+  } catch (e) {
+    console.log("Bad naddr", naddr, e);
+  }
+  return undefined;
+}
+
 export async function getMetaAddr(): Promise<SiteAddr | undefined> {
   // <link rel="manifest" href="manifest.json" />
   const metas = document.getElementsByTagName("meta");
