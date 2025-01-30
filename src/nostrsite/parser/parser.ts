@@ -956,7 +956,7 @@ export class NostrParser {
   //   ];
   // }
 
-  private parseLinks(e: NDKEvent | NostrEvent): string[] {
+  public parseLinks(e: NDKEvent | NostrEvent): string[] {
     const links: string[] = [];
     if (e.content) {
       const RX =
