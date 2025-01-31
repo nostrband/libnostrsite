@@ -761,11 +761,13 @@ export class NostrParser {
         code = `<a href="${url}" class="vbx-media" target="_blank"><img class="venobox" src="${url}" /></a>`;
       }
 
-      // FIXME: if url contains stuff like "’" then marked might
+      // NOTE: if url contains stuff like "’" then marked will
       // run it through percent encode and href will contain "%E2%80%99",
-      // and it's not clear how we have to reimplement it here...
-      const nodes = dom(`a[href="${url}"]`);
-      // console.log("nodes", `a[href="${url}"]`, nodes);
+      // so we're checking both variants. Should we only check urle?
+      const urle = encodeURI(url);
+      let nodes = dom(`a[href="${url}"]`);
+      if (!nodes.length) nodes = dom(`a[href="${urle}"]`);
+
       const elements: any[] = [];
       nodes.each((_: number, el: any) => {
         elements.push(el);
@@ -777,7 +779,7 @@ export class NostrParser {
           // links with an anchor (made using markdown [text](url) syntax)
           // aren't replaced, bcs anchor would be lost, which user definitely
           // didn't want
-          replace = node.text() === url;
+          replace = node.text() === url || node.text() === urle;
         } else if (url.startsWith("nostr:")) {
           // nostr link
           const id = url.split("nostr:")[1];
@@ -812,7 +814,7 @@ export class NostrParser {
         } else {
           // web link
           code = `<np-embed url='${url}'>${node.prop("outerHTML")}</np-embed>`;
-          replace = node.text() === url;
+          replace = node.text() === url || node.text() === urle;
           // console.log("web link replace", replace, url, '"'+node+'"', code);
         }
 
