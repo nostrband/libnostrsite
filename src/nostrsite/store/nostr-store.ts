@@ -1114,32 +1114,45 @@ export class NostrStore extends RamStore {
       .map((e) => new NDKEvent(this.ndk, e));
     console.log("cached profiles", profiles, pubkeys);
 
-    const nonCachedPubkeys = [
-      ...new Set(pubkeys.filter((p) => !profiles.find((e) => e.pubkey === p))),
-    ];
-
-    if (nonCachedPubkeys.length > 0) {
+    // fetch helper
+    const fetch = async (fetchPubkeys: string[]) => {
       const relays = [
         ...this.settings.contributor_relays,
         ...OUTBOX_RELAYS,
         ...relayHints,
       ];
-      console.log("fetching profiles", nonCachedPubkeys, relays);
+      console.log("fetching profiles", fetchPubkeys, relays);
       const events = await fetchEvents(
         this.ndk,
         {
           kinds: [KIND_PROFILE],
-          authors: nonCachedPubkeys,
+          authors: fetchPubkeys,
         },
         relays,
         1000 // timeoutMs
       );
       console.log("fetched profiles", { events, relays });
       if (events) {
-        profiles.push(...events);
-
         await this.storeEvents([...events]);
       }
+
+      return events;
+    };
+
+    const nonCachedPubkeys = [
+      ...new Set(pubkeys.filter((p) => !profiles.find((e) => e.pubkey === p))),
+    ];
+
+    // update cached profiles in background
+    if (profiles.length) {
+      fetch(profiles.map(e => e.pubkey));
+    }
+
+    // fetch non-cached profiles in sync
+    if (nonCachedPubkeys.length > 0) {
+      const events = await fetch(nonCachedPubkeys);
+      if (events) profiles.push(...events);
+
       // NOTE: links in bio are non-standard, and it's
       // an infinite loop here (fetching profiles that link
       // to each other won't finish), we should implement
