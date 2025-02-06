@@ -962,7 +962,7 @@ export class NostrParser {
     const links: string[] = [];
     if (e.content) {
       const RX =
-        /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%\?=~_’|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi;
+        /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%\?=~_’|$!:,.;\(\)]*[A-Z0-9+&@#\/%=~_|$\(\)]/gi;
       // the one below doesn't cut the trailing dot "."
       //      /(?:(?:https?):\/\/)(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:([-A-Z0-9+&@#/%=~_|$?!:,.]*)|[A-Z0-9+&@#/%=~_|$])/gi;
       links.push(...[...e.content.matchAll(RX)].map((m) => m[0]));
