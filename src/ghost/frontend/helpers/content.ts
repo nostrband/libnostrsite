@@ -113,6 +113,8 @@ export default function content(options: any = {}) {
   <style>
   np-map { margin: 0.5rem 0 }
   np-content p { margin-bottom: ${margin}rem; }
+  np-content ul { margin-bottom: ${margin}rem; }
+  np-content ol { margin-bottom: ${margin}rem; }
   np-content h1 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
   np-content h2 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
   np-content h3 { margin-top: ${2 * margin}rem; margin-bottom: ${margin}rem; }
