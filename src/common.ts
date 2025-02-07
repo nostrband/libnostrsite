@@ -559,7 +559,7 @@ export function startReplacingFeatureImagesWithVideoPreviews() {
         console.log("injecting video preview", url);
 
         let html = `
-          <video src="${url}"
+          <video src="${url}#t=0.1"
             preload="meta"
             style="width: 100%; height: 100%"
           ></video>

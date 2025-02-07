@@ -754,7 +754,7 @@ export class NostrParser {
     for (const url of allLinks) {
       let code = "";
       if (isVideoUrl(url, post.event)) {
-        code = `<video controls src="${url}" style="width:100%;"></video>`;
+        code = `<video controls src="${url}#t=0.1" style="width:100%;"></video>`;
       } else if (isAudioUrl(url, post.event)) {
         code = `<audio controls src="${url}"></audio>`;
       } else if (isImageUrl(url, post.event)) {
